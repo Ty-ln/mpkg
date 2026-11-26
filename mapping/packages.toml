@@ -1,0 +1,33 @@
+# Mapping-DB v0 – kanonischer Name (an Debian angelehnt) → Name je Backend.
+# Fehlt ein Feld, wird der kanonische Name unverändert verwendet.
+# Ziel für v1: die Top-300-Homebrew-Formeln, halbautomatisch erzeugt.
+
+[packages.python3]
+macports = "python313"
+homebrew = "python@3.13"
+debian = "python3"
+
+[packages.nodejs]
+macports = "nodejs22"
+homebrew = "node"
+debian = "nodejs"
+
+[packages.gnupg]
+macports = "gnupg2"
+homebrew = "gnupg"
+debian = "gnupg"
+
+[packages.fd-find]
+macports = "fd"
+homebrew = "fd"
+debian = "fd-find"
+
+[packages.ripgrep]
+macports = "ripgrep"
+homebrew = "ripgrep"
+debian = "ripgrep"
+
+[packages.ffmpeg]
+macports = "ffmpeg"
+homebrew = "ffmpeg"
+debian = "ffmpeg"

@@ -1,0 +1,71 @@
+# newProject – apt-artiger Paketmanager für macOS (Scoping)
+
+**Arbeitstitel:** `mpkg`
+**Stand:** 26.11.2026
+**Status:** Idee / Scoping
+
+## Worum es geht
+
+Seit September 2026 baut Homebrew keine Binärpakete mehr für Intel-Macs, und ab September 2027 läuft Homebrew dort gar nicht mehr. Besitzer von Intel-MacBooks haben dann keinen einfachen, verlässlichen Weg mehr, Software über die Kommandozeile zu installieren.
+
+`mpkg` soll das lösen:
+
+1. **Auf Intel-Macs zuverlässig und einfach funktionieren**: ein Installer, keine Bastelei.
+2. **Die Bedienung von apt & Co. auf den Mac bringen**: `mpkg install`, `mpkg search`, `mpkg upgrade`.
+3. **Mehrere Backends nutzen**: native macOS-Pakete (MacPorts), bei Bedarf als Fallback eine leichte Debian-VM.
+
+## Dokumente
+
+| Datei | Inhalt |
+|---|---|
+| [01-problem-und-zielgruppe.md](01-problem-und-zielgruppe.md) | Problem, Motivation, Zielgruppe, Zeitfenster |
+| [02-bestehende-loesungen.md](02-bestehende-loesungen.md) | Marktüberblick: Homebrew, MacPorts, Fink, Nix, VM-Lösungen |
+| [03-architektur.md](03-architektur.md) | Technischer Ansatz, Komponenten, Backend-Auswahl |
+| [04-mvp-und-roadmap.md](04-mvp-und-roadmap.md) | MVP-Umfang, Phasen, Nicht-Ziele |
+| [05-risiken-und-offene-fragen.md](05-risiken-und-offene-fragen.md) | Risiken, Gegenmaßnahmen, offene Entscheidungen |
+
+## Code
+
+Kern in **Rust**, VM-Helfer in **Swift** (Entscheidungen in `05-risiken-und-offene-fragen.md`).
+
+```
+Cargo.toml
+src/
+  main.rs            Einstieg, Befehle verteilen
+  cli.rs             clap-Befehle (install, remove, search, …)
+  resolver.rs        Backend-Wahl + Name-Mapping
+  mapping.rs         Mapping-DB laden (eingebaut + ~/.mpkg/mapping.toml)
+  doctor.rs          Systemprüfung
+  migrate.rs         migrate-from-brew
+  backend/
+    mod.rs           Trait `Backend`, Hilfsfunktionen
+    macports.rs      MacPorts-Backend (MVP)
+    linuxvm.rs       VM-Backend (Phase 2, ruft mpkg-vm)
+mapping/packages.toml  Mapping-DB v0
+helpers/mpkg-vm/     Swift-Helfer für Virtualization.framework (Gerüst)
+scripts/build-universal.sh  Universal Binary Intel + Apple Silicon
+```
+
+### Loslegen
+
+```sh
+cargo build
+cargo run -- --help
+cargo run -- doctor
+cargo run -- --dry-run install python3 ripgrep
+cargo run -- --dry-run migrate-from-brew
+```
+
+## Kernidee in einem Bild
+
+```
+                ┌──────────────────────────────┐
+  Nutzer  ───▶  │  mpkg CLI (apt-artige Befehle)│
+                └──────────────┬───────────────┘
+                               │ Resolver: Name-Mapping + Backend-Wahl
+              ┌────────────────┼─────────────────┐
+              ▼                ▼                 ▼
+     MacPorts-Binaries   Homebrew (optional,   Debian-amd64/arm64-VM
+     (nativ, Intel +     nur Apple Silicon)    (Fallback, CLI-Tools
+      Apple Silicon)                            über Shims im PATH)
+```
