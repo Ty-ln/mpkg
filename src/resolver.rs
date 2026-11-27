@@ -6,6 +6,9 @@ use crate::state::State;
 use anyhow::{Result, anyhow, bail};
 use std::cell::RefCell;
 
+/// Bis zu dieser macOS-Version wählt mpkg bei „nur Quellcode“ automatisch die VM.
+const OLD_MACOS_MAX: u32 = 12;
+
 pub struct Resolver {
     mapping: MappingDb,
     backends: Vec<Box<dyn Backend>>,
@@ -75,10 +78,18 @@ impl Resolver {
             Availability::NotFound => 4,
         };
 
+        // Auf alten Systemen dauern Quellcode-Builds lange und scheitern öfter (siehe 06):
+        // dort ist das fertige Debian-Paket aus der VM die bessere Wahl.
+        let prefer_vm_over_source = crate::setup::macos_major().is_ok_and(|m| m <= OLD_MACOS_MAX);
+
         let mut best: Option<Choice> = None;
         for backend in self.ready_backends() {
-            // Die VM nur fragen (und dafür ggf. starten), wenn nativ nichts gefunden wurde.
-            if backend.is_fallback() && best.is_some() {
+            // Die VM nur fragen (und dafür ggf. starten), wenn nativ kein Binärpaket da ist:
+            // gar nichts gefunden, oder nur Quellcode auf einem alten System.
+            let native_needs_build = best
+                .as_ref()
+                .is_some_and(|b| matches!(b.availability, Availability::SourceOnly | Availability::OlderBinary));
+            if backend.is_fallback() && best.is_some() && !(prefer_vm_over_source && native_needs_build) {
                 continue;
             }
             let native = self.mapping.name_for(name, backend.id());
