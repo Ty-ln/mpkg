@@ -67,7 +67,9 @@ mpkg install --backend linuxvm ripgrep   # VM erzwingen
 mpkg vm shell | stop | status
 ```
 
-Die Programme landen als Shims in `~/.mpkg/bin` und laufen im aktuellen Verzeichnis: Das Home-Verzeichnis ist im Gast am selben Pfad eingehängt. Die VM startet beim ersten Aufruf (beim ersten Mal ~40 s, danach ~8 s) und fährt nach 10 Minuten ohne Nutzung wieder herunter.
+Die Programme landen als Shims in `~/.mpkg/bin` und laufen im aktuellen Verzeichnis: Das Home-Verzeichnis ist im Gast am selben Pfad eingehängt.
+
+**Start und Stopp passieren automatisch.** Von Hand nötig ist nur einmal `mpkg vm create`. Danach startet mpkg die VM selbst, sobald sie gebraucht wird: beim Aufruf eines Programms aus der VM (z. B. `hollywood`), bei `mpkg install`/`remove` über die VM und bei `mpkg update`/`upgrade`. Der erste Start nach dem Anlegen dauert ~40 s, spätere ~8 s. Nach 10 Minuten ohne Nutzung fährt die VM von selbst herunter, aber nie, solange noch ein Programm darin läuft. `mpkg vm start` und `mpkg vm stop` braucht man nur, um das von Hand vorzuziehen.
 
 ### Release bauen
 
