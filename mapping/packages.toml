@@ -1,6 +1,6 @@
-# Mapping-DB v0 – kanonischer Name (an Debian angelehnt) → Name je Backend.
+# Mapping-DB v1 – kanonischer Name (an Debian angelehnt) → Name je Backend.
 # Fehlt ein Feld, wird der kanonische Name unverändert verwendet.
-# Ziel für v1: die Top-300-Homebrew-Formeln, halbautomatisch erzeugt.
+# Deckt alle Top-300-Homebrew-Formeln ab, die es in MacPorts unter anderem Namen gibt (Stand 27.11.2026).
 
 [packages.python3]
 macports = "python313"
@@ -123,3 +123,38 @@ homebrew = "jupyterlab"
 [packages.tldr]                 # prüfen – Rust-Client
 macports = "tealdeer"
 homebrew = "tldr"
+
+[packages.kubectl]
+macports = "kubectl-1.37"
+homebrew = "kubernetes-cli"
+debian = "kubectl"
+
+[packages.whisper-cpp]
+macports = "whisper"
+homebrew = "whisper.cpp"
+debian = "whisper.cpp"
+
+[packages.docker-buildx]
+macports = "docker-buildx-plugin"
+homebrew = "docker-buildx"
+debian = "docker-buildx"
+
+[packages.dotnet]
+macports = "dotnet-cli"
+homebrew = "dotnet"
+debian = "dotnet-sdk-8.0"
+
+[packages.typos]
+macports = "typos"
+homebrew = "typos-cli"
+debian = "typos"
+
+[packages.telnet]
+macports = "inetutils"
+homebrew = "telnet"
+debian = "telnet"
+
+[packages.docker-credential-helpers]
+macports = "docker-credential-helper-osxkeychain"
+homebrew = "docker-credential-helper"
+debian = "golang-docker-credential-helpers"
