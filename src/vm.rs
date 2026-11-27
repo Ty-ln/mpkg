@@ -8,7 +8,7 @@
 //!   - Das Home-Verzeichnis ist per virtiofs am selben Pfad im Gast eingehängt,
 //!     daher funktionieren relative Pfade und das aktuelle Verzeichnis wie gewohnt.
 //!
-//! Dateien in ~/.mpkg/vm: disk.raw, seed.iso, mac, id_ed25519, known_hosts, pid, *.log
+//! Dateien in ~/.mpkg/vm: disk.raw, seed.iso, mac, id_ed25519, known_hosts, pid, last-used, *.log
 
 use crate::backend::run;
 use anyhow::{Context, Result, bail};
@@ -214,10 +214,12 @@ pub fn is_running() -> bool {
 }
 
 /// Startet die VM im Hintergrund (falls nötig) und wartet, bis ssh antwortet.
+/// Berührt last-used, damit der Helfer die VM nicht in den Ruhemodus schickt.
 pub fn ensure_running() -> Result<String> {
     if !is_created() {
         bail!("Die VM ist noch nicht angelegt – `mpkg vm create`.");
     }
+    std::fs::write(dir()?.join("last-used"), "")?;
     if !is_running() {
         start_helper()?;
     }

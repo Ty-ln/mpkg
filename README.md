@@ -67,7 +67,7 @@ mpkg install --backend linuxvm ripgrep   # VM erzwingen
 mpkg vm shell | stop | status
 ```
 
-Die Programme landen als Shims in `~/.mpkg/bin` und laufen im aktuellen Verzeichnis: Das Home-Verzeichnis ist im Gast am selben Pfad eingehängt. Die VM startet beim ersten Aufruf (beim ersten Mal ~40 s, danach ~8 s).
+Die Programme landen als Shims in `~/.mpkg/bin` und laufen im aktuellen Verzeichnis: Das Home-Verzeichnis ist im Gast am selben Pfad eingehängt. Die VM startet beim ersten Aufruf (beim ersten Mal ~40 s, danach ~8 s) und fährt nach 10 Minuten ohne Nutzung wieder herunter.
 
 ### Release bauen
 
