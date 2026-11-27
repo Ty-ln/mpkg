@@ -8,7 +8,8 @@
 //!   - Das Home-Verzeichnis ist per virtiofs am selben Pfad im Gast eingehängt,
 //!     daher funktionieren relative Pfade und das aktuelle Verzeichnis wie gewohnt.
 //!
-//! Dateien in ~/.mpkg/vm: disk.raw, seed.iso, mac, id_ed25519, known_hosts, pid, last-used, *.log
+//! Dateien in ~/.mpkg/vm: disk.raw, seed.iso, mac, id_ed25519, known_hosts, pid, ip, last-used, *.log
+//! (vor macOS 13 zusätzlich vmlinuz, initrd, cmdline – siehe vmboot.rs)
 
 use crate::backend::run;
 use anyhow::{Context, Result, bail};
@@ -48,8 +49,8 @@ pub fn helper() -> Option<PathBuf> {
 /// Voraussetzungen fürs VM-Backend; Err mit Begründung, wenn etwas fehlt.
 pub fn supported() -> Result<PathBuf> {
     let major = crate::setup::macos_major()?;
-    if major < 13 {
-        bail!("Das VM-Backend braucht derzeit macOS 13 oder neuer (dieses System: macOS {major}).");
+    if major < 11 {
+        bail!("Das VM-Backend braucht macOS 11 oder neuer (dieses System: macOS {major}).");
     }
     helper().with_context(|| format!("Swift-Helfer `{HELPER}` nicht gefunden"))
 }
@@ -112,6 +113,10 @@ pub fn create(dry_run: bool) -> Result<()> {
     let disk = std::fs::OpenOptions::new().write(true).open(dir.join("disk.raw"))?;
     if disk.metadata()?.len() < DISK_BYTES {
         disk.set_len(DISK_BYTES)?;
+    }
+    // Vor macOS 13 kein EFI-Boot: Kernel und initrd für VZLinuxBootLoader bereitlegen.
+    if crate::setup::macos_major()? < 13 || std::env::var_os("MPKG_VM_LINUX_BOOT").is_some() {
+        crate::vmboot::extract(&dir)?;
     }
 
     let key = dir.join("id_ed25519");
@@ -230,6 +235,8 @@ fn start_helper() -> Result<()> {
     let helper = supported()?;
     let dir = dir()?;
     let home = std::env::var("HOME").context("HOME nicht gesetzt")?;
+    // Alte IP verwerfen; sie wird erst gültig, wenn die neue VM per ssh erreichbar ist.
+    let _ = std::fs::remove_file(dir.join("ip"));
     eprintln!("Starte die Debian-VM …");
     let child = Command::new(helper)
         .arg("run")
@@ -263,6 +270,8 @@ fn wait_ready() -> Result<String> {
                 .status()
                 .is_ok_and(|s| s.success());
             if ready {
+                // Für den Helfer: sauberes Herunterfahren per ssh (siehe mpkg-vm).
+                std::fs::write(dir()?.join("ip"), &ip)?;
                 return Ok(ip);
             }
         }
@@ -342,6 +351,9 @@ pub fn status() -> Result<()> {
     println!("VM: {state}");
     if let Err(e) = supported() {
         println!("  ! {e}");
+    }
+    if crate::setup::macos_major().is_ok_and(|m| m < 12) {
+        println!("  ! macOS 11: Das Home-Verzeichnis ist in der VM nicht sichtbar (virtiofs erst ab macOS 12).");
     }
     Ok(())
 }

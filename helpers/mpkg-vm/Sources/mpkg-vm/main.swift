@@ -5,6 +5,8 @@
 //   mpkg-vm run <vm-dir> <share-dir>
 //
 // <vm-dir> enthält disk.raw, seed.iso, mac (MAC-Adresse) und efi.vars (wird angelegt).
+// Liegen dort vmlinuz, initrd und cmdline, bootet die VM über VZLinuxBootLoader (macOS 11/12),
+// sonst per EFI (ab macOS 13). Die Home-Freigabe (virtiofs) gibt es ab macOS 12.
 // Ruhemodus: Der Rust-Kern berührt <vm-dir>/last-used bei jedem Aufruf. Ist das länger als
 // idleSeconds her und läuft keine ssh-Sitzung mit dem VM-Schlüssel, fährt die VM herunter.
 // <share-dir> wird per virtiofs mit dem Tag "home" in den Gast gereicht.
@@ -36,13 +38,24 @@ func makeConfiguration(vmDir: URL, share: URL) throws -> VZVirtualMachineConfigu
     config.cpuCount = cpuCount
     config.memorySize = memoryBytes
 
-    let varsURL = vmDir.appendingPathComponent("efi.vars")
-    let loader = VZEFIBootLoader()
-    loader.variableStore = FileManager.default.fileExists(atPath: varsURL.path)
-        ? VZEFIVariableStore(url: varsURL)
-        : try VZEFIVariableStore(creatingVariableStoreAt: varsURL)
-    config.bootLoader = loader
-    config.platform = VZGenericPlatformConfiguration()
+    let kernelURL = vmDir.appendingPathComponent("vmlinuz")
+    if FileManager.default.fileExists(atPath: kernelURL.path) {
+        let loader = VZLinuxBootLoader(kernelURL: kernelURL)
+        loader.initialRamdiskURL = vmDir.appendingPathComponent("initrd")
+        loader.commandLine = try String(contentsOf: vmDir.appendingPathComponent("cmdline"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        config.bootLoader = loader
+    } else if #available(macOS 13, *) {
+        let varsURL = vmDir.appendingPathComponent("efi.vars")
+        let loader = VZEFIBootLoader()
+        loader.variableStore = FileManager.default.fileExists(atPath: varsURL.path)
+            ? VZEFIVariableStore(url: varsURL)
+            : try VZEFIVariableStore(creatingVariableStoreAt: varsURL)
+        config.bootLoader = loader
+        config.platform = VZGenericPlatformConfiguration()
+    } else {
+        throw NSError(domain: "mpkg-vm", code: 2, userInfo: [NSLocalizedDescriptionKey: "vmlinuz fehlt (vor macOS 13 nötig)"])
+    }
 
     let disk = try VZDiskImageStorageDeviceAttachment(
         url: vmDir.appendingPathComponent("disk.raw"), readOnly: false)
@@ -62,9 +75,11 @@ func makeConfiguration(vmDir: URL, share: URL) throws -> VZVirtualMachineConfigu
     net.macAddress = mac
     config.networkDevices = [net]
 
-    let fs = VZVirtioFileSystemDeviceConfiguration(tag: "home")
-    fs.share = VZSingleDirectoryShare(directory: VZSharedDirectory(url: share, readOnly: false))
-    config.directorySharingDevices = [fs]
+    if #available(macOS 12, *) {
+        let fs = VZVirtioFileSystemDeviceConfiguration(tag: "home")
+        fs.share = VZSingleDirectoryShare(directory: VZSharedDirectory(url: share, readOnly: false))
+        config.directorySharingDevices = [fs]
+    }
 
     // Serielle Konsole nach stdout – der Rust-Kern leitet sie in vm-dir/console.log.
     let serial = VZVirtioConsoleDeviceSerialPortConfiguration()
@@ -141,7 +156,26 @@ final class Runner: NSObject, VZVirtualMachineDelegate {
         idleTimer = timer
     }
 
+    /// Sauber über den Gast herunterfahren: Beim Linux-Bootloader (macOS 11/12) reagiert der
+    /// Gast nicht auf requestStop. Die IP legt der Rust-Kern in <vm-dir>/ip ab.
+    func poweroffViaSSH() {
+        guard let ip = try? String(contentsOf: vmDir.appendingPathComponent("ip"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines), !ip.isEmpty else { return }
+        let ssh = Process()
+        ssh.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+        ssh.arguments = [
+            "-i", vmDir.appendingPathComponent("id_ed25519").path,
+            "-o", "UserKnownHostsFile=" + vmDir.appendingPathComponent("known_hosts").path,
+            "-o", "StrictHostKeyChecking=yes", "-o", "BatchMode=yes", "-o", "ConnectTimeout=3",
+            "mpkg@" + ip, "sudo systemctl poweroff",
+        ]
+        ssh.standardOutput = FileHandle.nullDevice
+        ssh.standardError = FileHandle.nullDevice
+        try? ssh.run() // nicht warten: guestDidStop beendet den Prozess
+    }
+
     func shutdown() {
+        poweroffViaSSH()
         if vm.canRequestStop {
             try? vm.requestStop()
         }

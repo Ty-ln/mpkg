@@ -8,6 +8,7 @@ mod resolver;
 mod setup;
 mod state;
 mod vm;
+mod vmboot;
 
 use anyhow::Result;
 use clap::Parser;
