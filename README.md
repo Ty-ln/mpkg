@@ -13,20 +13,9 @@ Seit September 2026 baut Homebrew keine Binärpakete mehr für Intel-Macs, und a
 2. **Einfache, gewohnte Befehle bieten**: `mpkg install`, `mpkg search`, `mpkg upgrade`.
 3. **Mehrere Backends nutzen**: native macOS-Pakete (MacPorts), bei Bedarf als Fallback eine leichte Debian-VM.
 
-## Dokumente
-
-| Datei | Inhalt |
-|---|---|
-| [01-problem-und-zielgruppe.md](01-problem-und-zielgruppe.md) | Problem, Motivation, Zielgruppe, Zeitfenster |
-| [02-bestehende-loesungen.md](02-bestehende-loesungen.md) | Marktüberblick: Homebrew, MacPorts, Fink, Nix, VM-Lösungen |
-| [03-architektur.md](03-architektur.md) | Technischer Ansatz, Komponenten, Backend-Auswahl |
-| [04-mvp-und-roadmap.md](04-mvp-und-roadmap.md) | MVP-Umfang, Phasen, Nicht-Ziele |
-| [05-risiken-und-offene-fragen.md](05-risiken-und-offene-fragen.md) | Risiken, Gegenmaßnahmen, offene Entscheidungen |
-| [06-messergebnisse.md](06-messergebnisse.md) | Gemessene MacPorts-Abdeckung (arm64, Intel Tahoe, Intel Big Sur) und Folgen |
-
 ## Code
 
-Kern in **Rust**, VM-Helfer in **Swift** (Entscheidungen in `05-risiken-und-offene-fragen.md`).
+Kern in **Rust**, VM-Helfer in **Swift**.
 
 ```
 Cargo.toml
