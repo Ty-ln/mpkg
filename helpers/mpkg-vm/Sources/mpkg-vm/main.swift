@@ -5,8 +5,8 @@
 //   mpkg-vm run <vm-dir> <share-dir>
 //
 // <vm-dir> enthält disk.raw, seed.iso, mac (MAC-Adresse) und efi.vars (wird angelegt).
-// Liegen dort vmlinuz, initrd und cmdline, bootet die VM über VZLinuxBootLoader (macOS 11/12),
-// sonst per EFI (ab macOS 13). Die Home-Freigabe (virtiofs) gibt es ab macOS 12.
+// Liegen dort vmlinuz, initrd und cmdline, bootet die VM über VZLinuxBootLoader (macOS 12),
+// sonst per EFI (ab macOS 13).
 // Ruhemodus: Der Rust-Kern berührt <vm-dir>/last-used bei jedem Aufruf. Ist das länger als
 // idleSeconds her und läuft keine ssh-Sitzung mit dem VM-Schlüssel, fährt die VM herunter.
 // <share-dir> wird per virtiofs mit dem Tag "home" in den Gast gereicht.
@@ -54,7 +54,7 @@ func makeConfiguration(vmDir: URL, share: URL) throws -> VZVirtualMachineConfigu
         config.bootLoader = loader
         config.platform = VZGenericPlatformConfiguration()
     } else {
-        throw NSError(domain: "mpkg-vm", code: 2, userInfo: [NSLocalizedDescriptionKey: "vmlinuz fehlt (vor macOS 13 nötig)"])
+        throw NSError(domain: "mpkg-vm", code: 2, userInfo: [NSLocalizedDescriptionKey: "vmlinuz fehlt (auf macOS 12 nötig)"])
     }
 
     let disk = try VZDiskImageStorageDeviceAttachment(
@@ -75,11 +75,9 @@ func makeConfiguration(vmDir: URL, share: URL) throws -> VZVirtualMachineConfigu
     net.macAddress = mac
     config.networkDevices = [net]
 
-    if #available(macOS 12, *) {
-        let fs = VZVirtioFileSystemDeviceConfiguration(tag: "home")
-        fs.share = VZSingleDirectoryShare(directory: VZSharedDirectory(url: share, readOnly: false))
-        config.directorySharingDevices = [fs]
-    }
+    let fs = VZVirtioFileSystemDeviceConfiguration(tag: "home")
+    fs.share = VZSingleDirectoryShare(directory: VZSharedDirectory(url: share, readOnly: false))
+    config.directorySharingDevices = [fs]
 
     // Serielle Konsole nach stdout – der Rust-Kern leitet sie in vm-dir/console.log.
     let serial = VZVirtioConsoleDeviceSerialPortConfiguration()

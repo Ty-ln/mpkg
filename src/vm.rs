@@ -9,7 +9,7 @@
 //!     daher funktionieren relative Pfade und das aktuelle Verzeichnis wie gewohnt.
 //!
 //! Dateien in ~/.mpkg/vm: disk.raw, seed.iso, mac, id_ed25519, known_hosts, pid, ip, last-used, *.log
-//! (vor macOS 13 zusätzlich vmlinuz, initrd, cmdline – siehe vmboot.rs)
+//! (auf macOS 12 zusätzlich vmlinuz, initrd, cmdline – siehe vmboot.rs)
 
 use crate::backend::run;
 use anyhow::{Context, Result, bail};
@@ -49,8 +49,8 @@ pub fn helper() -> Option<PathBuf> {
 /// Voraussetzungen fürs VM-Backend; Err mit Begründung, wenn etwas fehlt.
 pub fn supported() -> Result<PathBuf> {
     let major = crate::setup::macos_major()?;
-    if major < 11 {
-        bail!("Das VM-Backend braucht macOS 11 oder neuer (dieses System: macOS {major}).");
+    if major < 12 {
+        bail!("Das VM-Backend braucht macOS 12 oder neuer (dieses System: macOS {major}).");
     }
     helper().with_context(|| format!("Swift-Helfer `{HELPER}` nicht gefunden"))
 }
@@ -351,9 +351,6 @@ pub fn status() -> Result<()> {
     println!("VM: {state}");
     if let Err(e) = supported() {
         println!("  ! {e}");
-    }
-    if crate::setup::macos_major().is_ok_and(|m| m < 12) {
-        println!("  ! macOS 11: Das Home-Verzeichnis ist in der VM nicht sichtbar (virtiofs erst ab macOS 12).");
     }
     Ok(())
 }

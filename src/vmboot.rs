@@ -1,4 +1,4 @@
-//! Kernel und initrd aus dem Debian-Image holen – für macOS 11/12.
+//! Kernel und initrd aus dem Debian-Image holen – für macOS 12.
 //!
 //! Erst ab macOS 13 kann Virtualization.framework das Image per EFI booten. Davor geht
 //! nur `VZLinuxBootLoader`, der Kernel und initrd als eigene Dateien braucht. Die liegen

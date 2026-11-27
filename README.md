@@ -56,7 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/Ty-ln/mpkg/main/install.sh | sh
 
 Das lädt die Universal Binary (Prüfsumme wird geprüft) nach `~/.mpkg/bin`, trägt den PATH ein und startet `mpkg setup`, das MacPorts einrichtet. Deinstallation: `./install.sh --uninstall`.
 
-### VM-Fallback (ab macOS 11; Home-Freigabe ab macOS 12)
+### VM-Fallback (ab macOS 12)
 
 Pakete, die es in MacPorts nicht gibt, installiert mpkg aus Debian in einer leichten VM:
 
