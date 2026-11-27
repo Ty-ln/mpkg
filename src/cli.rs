@@ -47,6 +47,23 @@ pub enum Command {
     Doctor,
     /// Explizit installierte Homebrew-Pakete übernehmen
     MigrateFromBrew,
+    /// MacPorts und alle Pakete nach einem macOS-Upgrade (oder Umzug auf einen anderen Mac) neu installieren
+    MigrateMacports,
     /// Verfügbare Backends anzeigen
     Backends,
+    /// MacPorts-Abdeckung der meistgenutzten Homebrew-Formeln messen
+    Coverage {
+        /// Anzahl der Formeln (nach Beliebtheit)
+        #[arg(long, default_value_t = 300)]
+        top: usize,
+        /// Ziel-Plattform, z. B. darwin_20.x86_64 (Big Sur Intel) … darwin_25.x86_64 (Tahoe Intel)
+        #[arg(long, conflicts_with = "intel")]
+        platform: Option<String>,
+        /// Kurzform für --platform darwin_25.x86_64 (macOS 26 Tahoe auf Intel)
+        #[arg(long)]
+        intel: bool,
+        /// Vollständigen Bericht als Markdown-Datei speichern
+        #[arg(long)]
+        report: Option<String>,
+    },
 }

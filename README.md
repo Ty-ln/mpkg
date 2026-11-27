@@ -23,6 +23,7 @@ Seit September 2026 baut Homebrew keine Binärpakete mehr für Intel-Macs, und a
 | [03-architektur.md](03-architektur.md) | Technischer Ansatz, Komponenten, Backend-Auswahl |
 | [04-mvp-und-roadmap.md](04-mvp-und-roadmap.md) | MVP-Umfang, Phasen, Nicht-Ziele |
 | [05-risiken-und-offene-fragen.md](05-risiken-und-offene-fragen.md) | Risiken, Gegenmaßnahmen, offene Entscheidungen |
+| [06-messergebnisse.md](06-messergebnisse.md) | Gemessene MacPorts-Abdeckung (arm64, Intel Tahoe, Intel Big Sur) und Folgen |
 
 ## Code
 
@@ -46,7 +47,22 @@ helpers/mpkg-vm/     Swift-Helfer für Virtualization.framework (Gerüst)
 scripts/build-universal.sh  Universal Binary Intel + Apple Silicon
 ```
 
-### Loslegen
+### Installation (für Nutzer)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Ty-ln/mpkg/main/install.sh | sh
+```
+
+Das lädt die Universal Binary (Prüfsumme wird geprüft) nach `~/.mpkg/bin`, trägt den PATH ein und startet `mpkg setup`, das MacPorts einrichtet. Deinstallation: `./install.sh --uninstall`.
+
+### Release bauen
+
+```sh
+./scripts/release.sh                                  # → dist/mpkg-macos-universal.tar.gz + .sha256
+./install.sh --from target/universal/mpkg --no-setup  # lokal testen
+```
+
+### Entwickeln
 
 ```sh
 cargo build

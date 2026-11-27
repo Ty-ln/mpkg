@@ -33,9 +33,21 @@ struct Asset {
 }
 
 pub fn run_setup(dry_run: bool) -> Result<()> {
+    // Nach einem macOS-Upgrade passt die vorhandene MacPorts-Installation nicht mehr:
+    // dann den Installer für die neue Version darüber installieren.
+    let mut os_upgrade = false;
     if Path::new(PORT).exists() {
-        println!("✓ MacPorts ist bereits installiert.");
-        return ensure_path(dry_run);
+        match crate::doctor::macports_platform_mismatch() {
+            Some(Some(msg)) => {
+                println!("! MacPorts passt nicht mehr zur macOS-Version ({msg}).");
+                println!("  Installiere die passende MacPorts-Version …");
+                os_upgrade = true;
+            }
+            _ => {
+                println!("✓ MacPorts ist bereits installiert.");
+                return ensure_path(dry_run);
+            }
+        }
     }
 
     ensure_clt(dry_run)?;
@@ -49,6 +61,9 @@ pub fn run_setup(dry_run: bool) -> Result<()> {
     println!("MacPorts {version} für macOS {major}: {}", asset.name);
 
     if dry_run {
+        if os_upgrade {
+            println!("→ danach müssten die installierten Pakete neu gebaut werden: mpkg migrate-macports");
+        }
         println!("→ würde laden: {}", asset.browser_download_url);
         println!("→ würde installieren: sudo installer -pkg {} -target /", asset.name);
         return ensure_path(true);
@@ -66,11 +81,15 @@ pub fn run_setup(dry_run: bool) -> Result<()> {
     run("sudo", &[PORT, "selfupdate"], false)?;
 
     println!("\n✓ MacPorts ist eingerichtet. Öffne ein neues Terminal oder lade deine Shell-Konfiguration neu.");
+    if os_upgrade {
+        println!("\n! Die bisher installierten Pakete wurden für die alte macOS-Version gebaut");
+        println!("  und müssen neu installiert werden: mpkg migrate-macports");
+    }
     Ok(())
 }
 
 /// Command Line Tools vorhanden? Sonst Apple-Installationsdialog öffnen.
-fn ensure_clt(dry_run: bool) -> Result<()> {
+pub(crate) fn ensure_clt(dry_run: bool) -> Result<()> {
     let ok = Command::new("xcode-select")
         .arg("-p")
         .output()

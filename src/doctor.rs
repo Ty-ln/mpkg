@@ -6,6 +6,32 @@ use std::path::Path;
 use std::process::Command;
 
 const MACPORTS_BIN: &str = "/opt/local/bin";
+const PORT: &str = "/opt/local/bin/port";
+pub(crate) const MIGRATION_URL: &str = "https://trac.macports.org/wiki/Migration";
+
+/// Passt die MacPorts-Installation noch zur laufenden macOS-Version?
+/// Nach einem OS-Upgrade bricht `port` mit
+/// „Current platform "darwin 26" does not match expected platform "darwin 25"“ ab.
+/// Some(None) = passt, Some(Some(meldung)) = OS-Upgrade erkannt, None = nicht prüfbar.
+pub(crate) fn macports_platform_mismatch() -> Option<Option<String>> {
+    let out = Command::new(PORT).args(["-q", "installed", "requested"]).output().ok()?;
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let hit = text
+        .lines()
+        .find(|l| l.contains("does not match expected platform"))
+        .map(|l| l.trim().trim_start_matches("Error:").trim().to_owned());
+    Some(hit)
+}
+
+fn macports_version() -> Option<String> {
+    let out = Command::new(PORT).arg("version").output().ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    text.trim().strip_prefix("Version:").map(|v| v.trim().to_owned())
+}
 
 fn check(label: &str, ok: bool, hint: &str) {
     if ok {
@@ -37,11 +63,28 @@ pub fn run() -> Result<()> {
         .unwrap_or(false);
     check("Xcode Command Line Tools", clt, "xcode-select --install");
 
-    check(
-        "MacPorts installiert",
-        Path::new("/opt/local/bin/port").exists(),
-        "mpkg setup",
-    );
+    let installed = Path::new(PORT).exists();
+    let label = match installed.then(macports_version).flatten() {
+        Some(v) => format!("MacPorts installiert ({v})"),
+        None => "MacPorts installiert".to_owned(),
+    };
+    check(&label, installed, "mpkg setup");
+
+    if installed {
+        match macports_platform_mismatch() {
+            Some(None) => check("MacPorts passt zur macOS-Version", true, ""),
+            Some(Some(msg)) => check(
+                "MacPorts passt zur macOS-Version",
+                false,
+                &format!(
+                    "macOS wurde aktualisiert ({msg}).\n        \
+                     `mpkg migrate-macports` installiert MacPorts und alle Pakete neu\n        \
+                     (Hintergrund: {MIGRATION_URL})"
+                ),
+            ),
+            None => println!("  ? MacPorts-Plattform nicht prüfbar"),
+        }
+    }
 
     // PATH-Prüfung
     let path = std::env::var("PATH").unwrap_or_default();

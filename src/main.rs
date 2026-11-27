@@ -1,5 +1,6 @@
 mod backend;
 mod cli;
+mod coverage;
 mod doctor;
 mod mapping;
 mod migrate;
@@ -30,6 +31,11 @@ fn main() -> Result<()> {
         Command::Setup => setup::run_setup(cli.dry_run),
         Command::Doctor => doctor::run(),
         Command::MigrateFromBrew => migrate::from_brew(&resolver, cli.dry_run),
+        Command::MigrateMacports => migrate::macports(cli.dry_run),
+        Command::Coverage { top, platform, intel, report } => {
+            let platform = if intel { Some("darwin_25.x86_64".to_owned()) } else { platform };
+            coverage::run(resolver.mapping(), top, platform.as_deref(), report.as_deref())
+        }
         Command::Backends => {
             resolver.print_backends();
             Ok(())

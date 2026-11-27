@@ -31,3 +31,95 @@ debian = "ripgrep"
 macports = "ffmpeg"
 homebrew = "ffmpeg"
 debian = "ffmpeg"
+
+# ---------------------------------------------------------------------------
+# Mapping-DB v1 – Kandidaten für die 54 nicht gefundenen Top-300-Formeln
+# (Stand 27.11.2026). Kommentar = Sicherheit der Zuordnung:
+#   sicher    = bekannter MacPorts-Name
+#   prüfen    = plausibel, mit `mpkg coverage` / `mpkg show` bestätigen
+# Fehlt ein Eintrag, gibt es (vermutlich) kein MacPorts-Gegenstück.
+# ---------------------------------------------------------------------------
+
+[packages.gnu-tar]              # sicher
+macports = "gnutar"
+homebrew = "gnu-tar"
+
+[packages.gnu-sed]              # sicher
+macports = "gsed"
+homebrew = "gnu-sed"
+
+[packages.glib]                 # sicher
+macports = "glib2"
+homebrew = "glib"
+
+[packages.maven]                # sicher
+macports = "maven3"
+homebrew = "maven"
+
+[packages.little-cms2]          # sicher
+macports = "lcms2"
+homebrew = "little-cms2"
+
+[packages.jpeg-xl]              # sicher
+macports = "libjxl"
+homebrew = "jpeg-xl"
+
+[packages.ca-certificates]      # sicher
+macports = "curl-ca-bundle"
+homebrew = "ca-certificates"
+
+[packages.sevenzip]             # prüfen
+macports = "7zip"
+homebrew = "sevenzip"
+
+[packages.mysql]                # prüfen
+macports = "mysql8"
+homebrew = "mysql"
+
+[packages.mysql-client]         # prüfen – MacPorts hat kein reines Client-Paket
+macports = "mysql8"
+homebrew = "mysql-client"
+
+[packages.libpq]                # prüfen – libpq steckt in postgresqlXX
+macports = "postgresql18"
+homebrew = "libpq"
+
+[packages.ffmpeg-full]          # prüfen – Funktionsumfang über Varianten (+gpl3 …)
+macports = "ffmpeg"
+homebrew = "ffmpeg-full"
+
+[packages.gcc]                  # prüfen – Versionsnummer
+macports = "gcc15"
+homebrew = "gcc"
+
+[packages.llvm]                 # prüfen – Versionsnummer
+macports = "llvm-21"
+homebrew = "llvm"
+
+[packages.clang-format]         # prüfen – clang-format steckt in clang-XX
+macports = "clang-21"
+homebrew = "clang-format"
+
+[packages.openjdk]              # prüfen – Homebrew „openjdk“ = neueste Version
+macports = "openjdk25"
+homebrew = "openjdk"
+
+[packages.awscli]               # prüfen – Python-Präfix
+macports = "py313-awscli"
+homebrew = "awscli"
+
+[packages.ansible]              # prüfen – Python-Präfix
+macports = "py313-ansible"
+homebrew = "ansible"
+
+[packages.virtualenv]           # prüfen – Python-Präfix
+macports = "py313-virtualenv"
+homebrew = "virtualenv"
+
+[packages.jupyterlab]           # prüfen – Python-Präfix
+macports = "py313-jupyterlab"
+homebrew = "jupyterlab"
+
+[packages.tldr]                 # prüfen – Rust-Client
+macports = "tealdeer"
+homebrew = "tldr"

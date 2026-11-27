@@ -8,11 +8,19 @@ const PORT: &str = "/opt/local/bin/port";
 /// Server mit den vorgebauten Archiven (ein Verzeichnis pro Port).
 const ARCHIVE_BASE: &str = "https://packages.macports.org";
 
-pub struct MacPorts;
+pub struct MacPorts {
+    /// Für `mpkg coverage`: andere Plattform prüfen, z. B. ".darwin_20.x86_64".
+    platform_override: Option<String>,
+}
 
 impl MacPorts {
     pub fn new() -> Self {
-        Self
+        Self { platform_override: None }
+    }
+
+    /// Prüft Binärpakete für eine fremde Plattform statt für dieses System.
+    pub fn with_platform(platform: &str) -> Self {
+        Self { platform_override: Some(platform.to_owned()) }
     }
 }
 
@@ -62,6 +70,21 @@ fn default_variants(output: &str) -> String {
 /// Bewusst ohne `curl -f`: Dessen Exit-Code bei HTTP-Fehlern ist nicht einheitlich
 /// (22, bei HTTP/2 teils 56). Der Statuscode über `-w` ist eindeutig.
 fn http_request(url: &str, head: bool, timeout_secs: u32) -> Option<(u16, String)> {
+    // Bis zu 3 Versuche bei Netzwerkfehlern, 429 (Rate-Limit) und 5xx – mit kurzer Pause.
+    for attempt in 1..=3u64 {
+        match http_request_once(url, head, timeout_secs) {
+            Some((code, body)) if code != 429 && code < 500 => return Some((code, body)),
+            result if attempt == 3 => return result,
+            _ => {
+                debug(format!("{url} → Versuch {attempt} fehlgeschlagen, wiederhole …"));
+                std::thread::sleep(std::time::Duration::from_secs(attempt));
+            }
+        }
+    }
+    None
+}
+
+fn http_request_once(url: &str, head: bool, timeout_secs: u32) -> Option<(u16, String)> {
     let timeout = timeout_secs.to_string();
     let mut cmd = Command::new("curl");
     cmd.args(["-sSL", "--max-time", timeout.as_str(), "-w", "\n%{http_code}"]);
@@ -118,8 +141,14 @@ fn exact_archive_status(name: &str, version: &str, revision: &str, variants: &st
 /// für diese Plattform (oder ein architekturunabhängiges) gibt.
 ///
 /// Archivnamen: <name>-<version>_<revision>[+varianten].darwin_<N>.<arch>.tbz2
-fn binary_archive_status(name: &str, version: &str, revision: &str, variants: &str) -> Availability {
-    let Some(platform) = platform_tag() else {
+fn binary_archive_status(
+    name: &str,
+    version: &str,
+    revision: &str,
+    variants: &str,
+    platform_override: Option<&str>,
+) -> Availability {
+    let Some(platform) = platform_override.map(str::to_owned).or_else(platform_tag) else {
         debug(format!("{name}: Plattform-Kennung (uname) nicht ermittelbar"));
         return Availability::Unknown;
     };
@@ -160,7 +189,19 @@ fn binary_archive_status(name: &str, version: &str, revision: &str, variants: &s
         listing.len(),
         if found { "gefunden" } else { "nicht gefunden" }
     ));
-    if found { Availability::Binary } else { Availability::SourceOnly }
+    if found {
+        return Availability::Binary;
+    }
+
+    // Gibt es für diese Plattform wenigstens eine ältere Version? Dann hinkt der Build hinterher.
+    let any_version = format!("{name}-");
+    let older = listing.match_indices(&any_version).any(|(i, _)| {
+        let rest = &listing[i..];
+        let file = &rest[..rest.find(".tbz2").unwrap_or(0)];
+        file.contains(&platform) || is_noarch(file, &platform)
+    });
+    debug(format!("{name}: ältere Version für `{platform}` vorhanden: {older}"));
+    if older { Availability::OlderBinary } else { Availability::SourceOnly }
 }
 
 impl Backend for MacPorts {
@@ -195,7 +236,7 @@ impl Backend for MacPorts {
             .unwrap_or_default();
         let variants = default_variants(&variants_out);
         debug(format!("{name}: version={version} revision={revision} standardvarianten={variants:?}"));
-        Ok(binary_archive_status(name, version, revision, &variants))
+        Ok(binary_archive_status(name, version, revision, &variants, self.platform_override.as_deref()))
     }
 
     fn install(&self, name: &str, dry_run: bool) -> Result<()> {
@@ -228,8 +269,24 @@ impl Backend for MacPorts {
     }
 
     fn upgrade(&self, dry_run: bool) -> Result<()> {
-        // TODO: Prüfen, welchen Exit-Code `port upgrade outdated` liefert,
-        // wenn nichts veraltet ist, und das hier nicht als Fehler werten.
+        // Erst nachsehen, ob etwas veraltet ist: `port upgrade outdated` behandelt
+        // „nichts zu tun“ je nach Version als Fehler.
+        // Ausgabe von `port -q outdated`: "name   1.0_0 < 1.1_0" pro Zeile.
+        let out = Command::new(PORT)
+            .args(["-q", "outdated"])
+            .output()
+            .context("`port outdated` fehlgeschlagen")?;
+        let outdated: Vec<String> = String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .filter_map(|line| line.split_whitespace().next())
+            .map(str::to_owned)
+            .collect();
+
+        if outdated.is_empty() {
+            println!("✓ Alle MacPorts-Pakete sind aktuell.");
+            return Ok(());
+        }
+        println!("{} veraltete Pakete: {}", outdated.len(), outdated.join(", "));
         run("sudo", &[PORT, "-N", "upgrade", "outdated"], dry_run)
     }
 }

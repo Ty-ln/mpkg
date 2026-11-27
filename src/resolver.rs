@@ -70,8 +70,9 @@ impl Resolver {
         let rank = |a: Availability| match a {
             Availability::Binary => 0,
             Availability::Unknown => 1,
-            Availability::SourceOnly => 2,
-            Availability::NotFound => 3,
+            Availability::OlderBinary => 2,
+            Availability::SourceOnly => 3,
+            Availability::NotFound => 4,
         };
 
         let mut best: Option<Choice> = None;
@@ -201,6 +202,9 @@ pub fn note(a: Availability) -> &'static str {
     match a {
         Availability::Binary => "",
         Availability::Unknown => "  [Binärpaket nicht prüfbar]",
+        Availability::OlderBinary => {
+            "  [⏳ Binärpaket nur für die Vorversion – jetzt Build aus Quellcode, oder später erneut versuchen]"
+        }
         Availability::SourceOnly => "  [⚠ kein Binärpaket – wird aus dem Quellcode gebaut]",
         Availability::NotFound => "  [nicht gefunden]",
     }

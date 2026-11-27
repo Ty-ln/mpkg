@@ -1,9 +1,11 @@
 //! `mpkg migrate-from-brew`: explizit installierte Homebrew-Pakete übernehmen.
+//! `mpkg migrate-macports`: MacPorts nach einem macOS-Upgrade neu aufsetzen.
 
-use crate::backend::{Availability, which};
+use crate::backend::{Availability, run, which};
 use crate::resolver::{Resolver, note};
 use anyhow::{Context, Result, bail};
 use std::io::{self, Write};
+use std::path::Path;
 use std::process::Command;
 
 /// Ein Eintrag aus `brew leaves`, z. B. "supabase/tap/supabase".
@@ -60,6 +62,10 @@ pub fn from_brew(resolver: &Resolver, dry_run: bool) -> Result<()> {
                         source += 1;
                         "⚠"
                     }
+                    Availability::OlderBinary => {
+                        source += 1;
+                        "⏳"
+                    }
                     _ => {
                         unknown += 1;
                         "?"
@@ -103,4 +109,17 @@ pub fn from_brew(resolver: &Resolver, dry_run: bool) -> Result<()> {
         return Ok(());
     }
     resolver.install(&to_install, None, false)
+}
+
+/// Überlässt die Migration `port migrate` (ab MacPorts 2.9): baut MacPorts selbst und die
+/// angeforderten Pakete samt Abhängigkeiten für die neue Plattform neu. Erkennt auch,
+/// wenn nichts zu tun ist, und fragt vor dem Start selbst nach.
+pub fn macports(dry_run: bool) -> Result<()> {
+    const PORT: &str = "/opt/local/bin/port";
+    if !Path::new(PORT).exists() {
+        bail!("MacPorts ist nicht installiert – zuerst `mpkg setup`.");
+    }
+    // Der Neubau von MacPorts braucht Compiler aus den Command Line Tools.
+    crate::setup::ensure_clt(dry_run)?;
+    run("sudo", &[PORT, "migrate"], dry_run)
 }

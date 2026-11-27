@@ -1,3 +1,4 @@
 /target
+/dist
 /helpers/mpkg-vm/.build
 .DS_Store

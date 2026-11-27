@@ -11,6 +11,9 @@ pub enum Availability {
     Binary,
     /// Paket existiert, ob es ein Binärpaket gibt, ließ sich nicht prüfen (z. B. offline).
     Unknown,
+    /// Binärpaket nur für eine ältere Version – die aktuelle wird vermutlich noch gebaut.
+    /// Installation jetzt = Build aus dem Quellcode.
+    OlderBinary,
     /// Nur aus dem Quellcode baubar.
     SourceOnly,
     NotFound,
