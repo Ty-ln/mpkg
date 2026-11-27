@@ -111,7 +111,7 @@ pub(crate) fn ensure_clt(dry_run: bool) -> Result<()> {
     )
 }
 
-fn macos_major() -> Result<u32> {
+pub(crate) fn macos_major() -> Result<u32> {
     let out = Command::new("sw_vers")
         .arg("-productVersion")
         .output()

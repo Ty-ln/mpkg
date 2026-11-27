@@ -75,6 +75,12 @@ install_from_release() {
 
   tar -xzf "$tmp/$ASSET" -C "$tmp"
   install_binary "$tmp/mpkg"
+  # Swift-Helfer für das VM-Backend (ab Release 0.2.0 im Archiv).
+  if [ -f "$tmp/mpkg-vm" ]; then
+    cp "$tmp/mpkg-vm" "$BIN_DIR/mpkg-vm"
+    chmod 755 "$BIN_DIR/mpkg-vm"
+    say "✓ VM-Helfer installiert: $BIN_DIR/mpkg-vm"
+  fi
 }
 
 ensure_path() {
@@ -100,7 +106,7 @@ run_setup() {
 }
 
 uninstall() {
-  rm -f "$BIN_DIR/mpkg"
+  rm -f "$BIN_DIR/mpkg" "$BIN_DIR/mpkg-vm"
   say "✓ mpkg entfernt."
   say "  MacPorts, installierte Pakete und $PREFIX/state.json bleiben erhalten."
   say "  Den PATH-Eintrag ggf. aus $(profile_file) entfernen."

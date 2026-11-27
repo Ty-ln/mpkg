@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "mpkg-vm",
-    platforms: [.macOS(.v11)], // Virtualization.framework für Linux-Gäste ab macOS 11 (auch Intel)
+    platforms: [.macOS(.v13)], // EFI-Boot für Linux-Gäste gibt es ab macOS 13 (Intel und Apple Silicon)
     targets: [
         .executableTarget(name: "mpkg-vm")
     ]

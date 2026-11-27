@@ -23,6 +23,10 @@ pub enum Availability {
 /// Neue Backends (Homebrew, Nix, …) implementieren nur diesen Trait.
 pub trait Backend {
     fn id(&self) -> &'static str;
+    /// Fallback (VM): nur gefragt, wenn kein natives Backend das Paket hat.
+    fn is_fallback(&self) -> bool {
+        false
+    }
     /// Ist das Backend selbst auf diesem System eingerichtet?
     fn is_ready(&self) -> bool;
     fn availability(&self, name: &str) -> Result<Availability>;

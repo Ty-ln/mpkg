@@ -17,3 +17,11 @@ lipo -create -output target/universal/mpkg \
 codesign --sign - --force target/universal/mpkg
 
 lipo -info target/universal/mpkg
+
+# Swift-Helfer für das VM-Backend, ebenfalls universal; braucht das Virtualization-Entitlement.
+SWIFT_ARGS=(-c release --arch arm64 --arch x86_64 --package-path helpers/mpkg-vm)
+swift build "${SWIFT_ARGS[@]}"
+# Ausgabepfad hängt von der Toolchain-Version ab – daher erfragen.
+cp "$(swift build "${SWIFT_ARGS[@]}" --show-bin-path)/mpkg-vm" target/universal/mpkg-vm
+codesign --sign - --entitlements helpers/mpkg-vm/mpkg-vm.entitlements --force target/universal/mpkg-vm
+lipo -info target/universal/mpkg-vm

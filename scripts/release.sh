@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 
 ASSET="mpkg-macos-universal.tar.gz"
 mkdir -p dist
-tar -czf "dist/$ASSET" -C target/universal mpkg
+tar -czf "dist/$ASSET" -C target/universal mpkg mpkg-vm
 (cd dist && shasum -a 256 "$ASSET" > "$ASSET.sha256")
 
 VERSION="v$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"

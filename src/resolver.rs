@@ -77,6 +77,10 @@ impl Resolver {
 
         let mut best: Option<Choice> = None;
         for backend in self.ready_backends() {
+            // Die VM nur fragen (und dafür ggf. starten), wenn nativ nichts gefunden wurde.
+            if backend.is_fallback() && best.is_some() {
+                continue;
+            }
             let native = self.mapping.name_for(name, backend.id());
             let availability = backend.availability(&native)?;
             if availability == Availability::Binary {
@@ -101,6 +105,10 @@ impl Resolver {
             }
             let c = self.choose(name, forced)?;
             println!("{name} → {} (über {}){}", c.native, c.backend.id(), note(c.availability));
+            let vm_ready = self.ready_backends().iter().any(|b| b.is_fallback());
+            if vm_ready && matches!(c.availability, Availability::SourceOnly | Availability::OlderBinary) {
+                println!("  Tipp: `mpkg install --backend linuxvm {name}` nimmt das fertige Debian-Paket aus der VM.");
+            }
             c.backend.install(&c.native, dry_run)?;
             if !dry_run {
                 let mut state = self.state.borrow_mut();

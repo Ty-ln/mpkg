@@ -37,13 +37,14 @@ src/
   resolver.rs        Backend-Wahl + Name-Mapping
   mapping.rs         Mapping-DB laden (eingebaut + ~/.mpkg/mapping.toml)
   doctor.rs          Systemprüfung
-  migrate.rs         migrate-from-brew
+  migrate.rs         migrate-from-brew, migrate-macports
+  vm.rs              Debian-VM: anlegen, starten, ssh-Zugriff (`mpkg vm …`)
   backend/
     mod.rs           Trait `Backend`, Hilfsfunktionen
     macports.rs      MacPorts-Backend (MVP)
-    linuxvm.rs       VM-Backend (Phase 2, ruft mpkg-vm)
-mapping/packages.toml  Mapping-DB v0
-helpers/mpkg-vm/     Swift-Helfer für Virtualization.framework (Gerüst)
+    linuxvm.rs       VM-Backend: apt im Gast + Shims in ~/.mpkg/bin
+mapping/packages.toml  Mapping-DB v1
+helpers/mpkg-vm/     Swift-Helfer: betreibt die VM über Virtualization.framework
 scripts/build-universal.sh  Universal Binary Intel + Apple Silicon
 ```
 
@@ -54,6 +55,19 @@ curl -fsSL https://raw.githubusercontent.com/Ty-ln/mpkg/main/install.sh | sh
 ```
 
 Das lädt die Universal Binary (Prüfsumme wird geprüft) nach `~/.mpkg/bin`, trägt den PATH ein und startet `mpkg setup`, das MacPorts einrichtet. Deinstallation: `./install.sh --uninstall`.
+
+### VM-Fallback (ab macOS 13)
+
+Pakete, die es in MacPorts nicht gibt, installiert mpkg aus Debian in einer leichten VM:
+
+```sh
+mpkg vm create            # einmalig: Debian 13 laden (~400 MB, SHA512-geprüft)
+mpkg install hollywood    # nicht in MacPorts → automatisch über die VM
+mpkg install --backend linuxvm ripgrep   # VM erzwingen
+mpkg vm shell | stop | status
+```
+
+Die Programme landen als Shims in `~/.mpkg/bin` und laufen im aktuellen Verzeichnis: Das Home-Verzeichnis ist im Gast am selben Pfad eingehängt. Die VM startet beim ersten Aufruf (beim ersten Mal ~40 s, danach ~8 s).
 
 ### Release bauen
 

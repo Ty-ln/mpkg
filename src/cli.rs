@@ -51,6 +51,11 @@ pub enum Command {
     MigrateMacports,
     /// Verfügbare Backends anzeigen
     Backends,
+    /// Debian-VM für Pakete, die es in MacPorts nicht gibt (Backend `linuxvm`)
+    Vm {
+        #[command(subcommand)]
+        action: VmAction,
+    },
     /// MacPorts-Abdeckung der meistgenutzten Homebrew-Formeln messen
     Coverage {
         /// Anzahl der Formeln (nach Beliebtheit)
@@ -66,4 +71,23 @@ pub enum Command {
         #[arg(long)]
         report: Option<String>,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum VmAction {
+    /// Debian-Image laden und die VM einrichten (einmalig, ~400 MB)
+    Create,
+    /// VM starten (passiert sonst automatisch bei Bedarf)
+    Start,
+    /// VM herunterfahren
+    Stop,
+    /// Zustand der VM anzeigen
+    Status,
+    /// Befehl in der VM ausführen (nutzen die Shims in ~/.mpkg/bin)
+    Exec {
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
+    /// Shell in der VM öffnen
+    Shell,
 }
