@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-/// apt-artiger Paketmanager für macOS.
+/// Paketmanager für macOS.
 #[derive(Parser, Debug)]
 #[command(name = "mpkg", version, about)]
 pub struct Cli {

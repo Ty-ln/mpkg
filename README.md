@@ -1,8 +1,7 @@
-# newProject – apt-artiger Paketmanager für macOS (Scoping)
+# mpkg – Paketmanager für macOS
 
-**Arbeitstitel:** `mpkg`
-**Stand:** 26.11.2026
-**Status:** Idee / Scoping
+**Stand:** 27.11.2026
+**Status:** MVP und VM-Fallback umgesetzt (v0.3.1), Tests auf Intel-Hardware stehen aus
 
 ## Worum es geht
 
@@ -11,7 +10,7 @@ Seit September 2026 baut Homebrew keine Binärpakete mehr für Intel-Macs, und a
 `mpkg` soll das lösen:
 
 1. **Auf Intel-Macs zuverlässig und einfach funktionieren**: ein Installer, keine Bastelei.
-2. **Die Bedienung von apt & Co. auf den Mac bringen**: `mpkg install`, `mpkg search`, `mpkg upgrade`.
+2. **Einfache, gewohnte Befehle bieten**: `mpkg install`, `mpkg search`, `mpkg upgrade`.
 3. **Mehrere Backends nutzen**: native macOS-Pakete (MacPorts), bei Bedarf als Fallback eine leichte Debian-VM.
 
 ## Dokumente
@@ -42,7 +41,7 @@ src/
   backend/
     mod.rs           Trait `Backend`, Hilfsfunktionen
     macports.rs      MacPorts-Backend (MVP)
-    linuxvm.rs       VM-Backend: apt im Gast + Shims in ~/.mpkg/bin
+    linuxvm.rs       VM-Backend: Debian-Pakete im Gast + Shims in ~/.mpkg/bin
 mapping/packages.toml  Mapping-DB v1
 helpers/mpkg-vm/     Swift-Helfer: betreibt die VM über Virtualization.framework
 scripts/build-universal.sh  Universal Binary Intel + Apple Silicon
@@ -92,7 +91,7 @@ cargo run -- --dry-run migrate-from-brew
 
 ```
                 ┌──────────────────────────────┐
-  Nutzer  ───▶  │  mpkg CLI (apt-artige Befehle)│
+  Nutzer  ───▶  │  mpkg CLI                    │
                 └──────────────┬───────────────┘
                                │ Resolver: Name-Mapping + Backend-Wahl
               ┌────────────────┼─────────────────┐

@@ -2,7 +2,7 @@
 name = "mpkg"
 version = "0.3.1"
 edition = "2024"
-description = "apt-artiger Paketmanager für macOS"
+description = "Paketmanager für macOS"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
