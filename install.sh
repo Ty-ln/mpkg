@@ -96,7 +96,7 @@ ensure_path() {
 
 run_setup() {
   say ""
-  say "Richte MacPorts ein (mpkg setup) …"
+  say "Richte die Paketquelle ein (mpkg setup: Homebrew auf Apple Silicon, MacPorts auf Intel) …"
   # Bei `curl | sh` ist stdin die Pipe – Rückfragen und sudo brauchen das Terminal.
   if [ -r /dev/tty ] && [ -w /dev/tty ]; then
     "$BIN_DIR/mpkg" setup < /dev/tty
@@ -108,7 +108,7 @@ run_setup() {
 uninstall() {
   rm -f "$BIN_DIR/mpkg" "$BIN_DIR/mpkg-vm"
   say "✓ mpkg entfernt."
-  say "  MacPorts, installierte Pakete und $PREFIX/state.json bleiben erhalten."
+  say "  Homebrew/MacPorts, installierte Pakete und $PREFIX/state.json bleiben erhalten."
   say "  Den PATH-Eintrag ggf. aus $(profile_file) entfernen."
 }
 

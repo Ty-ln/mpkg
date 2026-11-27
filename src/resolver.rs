@@ -52,7 +52,7 @@ impl Resolver {
     pub fn ensure_any_ready(&self) -> Result<()> {
         if self.ready_backends().is_empty() {
             bail!(
-                "Kein Backend eingerichtet – MacPorts ist nicht installiert.\n\
+                "Kein Backend eingerichtet (Homebrew auf Apple Silicon, sonst MacPorts).\n\
                  Führe `mpkg setup` aus, um es automatisch einzurichten."
             );
         }

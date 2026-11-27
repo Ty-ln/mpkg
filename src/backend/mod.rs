@@ -1,3 +1,4 @@
+pub mod homebrew;
 pub mod linuxvm;
 pub mod macports;
 
@@ -39,8 +40,10 @@ pub trait Backend {
 }
 
 /// Backends in Prioritätsreihenfolge: nativ zuerst, VM als Fallback.
+/// Homebrew ist nur auf Apple Silicon bereit und hat dort Vorrang vor MacPorts.
 pub fn available_backends() -> Vec<Box<dyn Backend>> {
     vec![
+        Box::new(homebrew::Homebrew::new()),
         Box::new(macports::MacPorts::new()),
         Box::new(linuxvm::LinuxVm::new()),
     ]

@@ -1,6 +1,9 @@
-//! `mpkg setup`: richtet MacPorts automatisch ein.
+//! `mpkg setup`: richtet das Haupt-Backend automatisch ein.
 //!
-//! Ablauf:
+//! Apple Silicon: Homebrew über den offiziellen, signierten `Homebrew.pkg`
+//! (Gatekeeper-geprüft, kein `curl | bash`) und `brew shellenv` in der Shell-Konfiguration.
+//!
+//! Intel – Ablauf für MacPorts:
 //!   1. Xcode Command Line Tools prüfen (sonst den Apple-Dialog öffnen)
 //!   2. Neuesten MacPorts-Release über die GitHub-API ermitteln
 //!   3. Passenden Installer für die macOS-Hauptversion wählen
@@ -19,6 +22,8 @@ use std::process::Command;
 const PORT: &str = "/opt/local/bin/port";
 const RELEASES_API: &str = "https://api.github.com/repos/macports/macports-base/releases/latest";
 const PATH_LINE: &str = r#"export PATH="/opt/local/bin:/opt/local/sbin:$PATH""#;
+const BREW_RELEASES_API: &str = "https://api.github.com/repos/Homebrew/brew/releases/latest";
+const BREW_SHELLENV_LINE: &str = r#"eval "$(/opt/homebrew/bin/brew shellenv)""#;
 
 #[derive(Deserialize)]
 struct Release {
@@ -33,6 +38,9 @@ struct Asset {
 }
 
 pub fn run_setup(dry_run: bool) -> Result<()> {
+    if std::env::consts::ARCH == "aarch64" {
+        return setup_homebrew(dry_run);
+    }
     // Nach einem macOS-Upgrade passt die vorhandene MacPorts-Installation nicht mehr:
     // dann den Installer für die neue Version darüber installieren.
     let mut os_upgrade = false;
@@ -69,13 +77,7 @@ pub fn run_setup(dry_run: bool) -> Result<()> {
         return ensure_path(true);
     }
 
-    let pkg = std::env::temp_dir().join(&asset.name);
-    let pkg_str = pkg.to_str().context("ungültiger Temp-Pfad")?;
-
-    run("curl", &["-fL", "--progress-bar", "-o", pkg_str, asset.browser_download_url.as_str()], false)?;
-    verify_package(&pkg)?;
-    run("sudo", &["installer", "-pkg", pkg_str, "-target", "/"], false)?;
-    let _ = std::fs::remove_file(&pkg);
+    install_pkg(&asset)?;
 
     ensure_path(false)?;
     run("sudo", &[PORT, "selfupdate"], false)?;
@@ -125,17 +127,64 @@ pub(crate) fn macos_major() -> Result<u32> {
         .with_context(|| format!("unbekannte macOS-Version `{}`", version.trim()))
 }
 
-/// Neuesten Release abfragen und den Installer für `major` heraussuchen.
-fn find_installer(major: u32) -> Result<(String, Asset)> {
+/// Neuesten Release eines GitHub-Repos über die API abfragen.
+fn latest_release(api: &str) -> Result<Release> {
     let out = Command::new("curl")
-        .args(["-fsSL", "-H", "Accept: application/vnd.github+json", RELEASES_API])
+        .args(["-fsSL", "-H", "Accept: application/vnd.github+json", api])
         .output()
         .context("`curl` fehlgeschlagen")?;
     if !out.status.success() {
-        bail!("MacPorts-Releases konnten nicht abgefragt werden (GitHub-API).");
+        bail!("Releases konnten nicht abgefragt werden (GitHub-API: {api}).");
     }
-    let release: Release =
-        serde_json::from_slice(&out.stdout).context("Antwort der GitHub-API nicht lesbar")?;
+    serde_json::from_slice(&out.stdout).context("Antwort der GitHub-API nicht lesbar")
+}
+
+/// Signiertes .pkg laden, mit Gatekeeper prüfen und installieren.
+fn install_pkg(asset: &Asset) -> Result<()> {
+    let pkg = std::env::temp_dir().join(&asset.name);
+    let pkg_str = pkg.to_str().context("ungültiger Temp-Pfad")?;
+    // --retry: Installer sind 30+ MB, Abbrüche bei schwachem WLAN sind häufig.
+    run("curl", &["-fL", "--retry", "3", "--progress-bar", "-o", pkg_str, asset.browser_download_url.as_str()], false)?;
+    verify_package(&pkg)?;
+    run("sudo", &["installer", "-pkg", pkg_str, "-target", "/"], false)?;
+    let _ = std::fs::remove_file(&pkg);
+    Ok(())
+}
+
+/// Apple Silicon: Homebrew einrichten (oder vorhandenes nutzen).
+fn setup_homebrew(dry_run: bool) -> Result<()> {
+    let brew = crate::backend::homebrew::BREW;
+    if Path::new(brew).exists() {
+        println!("✓ Homebrew ist bereits installiert.");
+        // Schon im PATH (z. B. über ~/.zshrc)? Dann keine zweite Zeile eintragen.
+        if std::env::var("PATH").unwrap_or_default().split(':').any(|p| p == "/opt/homebrew/bin") {
+            println!("✓ /opt/homebrew/bin ist im PATH");
+            return Ok(());
+        }
+        return ensure_profile_line("/opt/homebrew/bin/brew shellenv", BREW_SHELLENV_LINE, "Homebrew", dry_run);
+    }
+    ensure_clt(dry_run)?;
+    let release = latest_release(BREW_RELEASES_API)?;
+    let asset = release
+        .assets
+        .into_iter()
+        .find(|a| a.name == "Homebrew.pkg")
+        .context("Kein Homebrew.pkg im neuesten Homebrew-Release gefunden")?;
+    println!("Homebrew {}: {}", release.tag_name, asset.name);
+    if dry_run {
+        println!("→ würde laden: {}", asset.browser_download_url);
+        println!("→ würde installieren: sudo installer -pkg {} -target /", asset.name);
+        return ensure_profile_line("/opt/homebrew/bin/brew shellenv", BREW_SHELLENV_LINE, "Homebrew", true);
+    }
+    install_pkg(&asset)?;
+    ensure_profile_line("/opt/homebrew/bin/brew shellenv", BREW_SHELLENV_LINE, "Homebrew", false)?;
+    println!("\n✓ Homebrew ist eingerichtet. Öffne ein neues Terminal oder lade deine Shell-Konfiguration neu.");
+    Ok(())
+}
+
+/// Neuesten Release abfragen und den Installer für `major` heraussuchen.
+fn find_installer(major: u32) -> Result<(String, Asset)> {
+    let release = latest_release(RELEASES_API)?;
 
     // "-26-" passt auf "MacPorts-2.12.7-26-Tahoe.pkg", aber nicht auf "-10.11-".
     let marker = format!("-{major}-");
@@ -176,23 +225,28 @@ pub(crate) fn shell_profile() -> Result<PathBuf> {
 
 /// /opt/local/bin in die Shell-Konfiguration eintragen (nach Rückfrage).
 fn ensure_path(dry_run: bool) -> Result<()> {
+    ensure_profile_line("/opt/local/bin", PATH_LINE, "MacPorts", dry_run)
+}
+
+/// `line` in die Shell-Konfiguration eintragen (nach Rückfrage), außer `marker` steht schon drin.
+fn ensure_profile_line(marker: &str, line: &str, name: &str, dry_run: bool) -> Result<()> {
     let profile = shell_profile()?;
     let content = std::fs::read_to_string(&profile).unwrap_or_default();
-    if content.contains("/opt/local/bin") {
+    if content.contains(marker) {
         println!("✓ PATH-Eintrag in {} vorhanden", profile.display());
         return Ok(());
     }
     if dry_run {
-        println!("→ würde in {} eintragen: {PATH_LINE}", profile.display());
+        println!("→ würde in {} eintragen: {line}", profile.display());
         return Ok(());
     }
 
-    print!("PATH-Eintrag für MacPorts in {} ergänzen? [J/n] ", profile.display());
+    print!("PATH-Eintrag für {name} in {} ergänzen? [J/n] ", profile.display());
     io::stdout().flush()?;
     let mut answer = String::new();
     io::stdin().read_line(&mut answer)?;
     if matches!(answer.trim(), "n" | "N") {
-        println!("Übersprungen. Manuell eintragen: {PATH_LINE}");
+        println!("Übersprungen. Manuell eintragen: {line}");
         return Ok(());
     }
 
@@ -201,7 +255,7 @@ fn ensure_path(dry_run: bool) -> Result<()> {
         .append(true)
         .open(&profile)
         .with_context(|| format!("{} nicht beschreibbar", profile.display()))?;
-    writeln!(file, "\n# MacPorts (eingetragen von mpkg)\n{PATH_LINE}")?;
+    writeln!(file, "\n# {name} (eingetragen von mpkg)\n{line}")?;
     println!("✓ PATH-Eintrag ergänzt");
     Ok(())
 }

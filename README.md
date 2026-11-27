@@ -11,7 +11,7 @@ Seit September 2026 baut Homebrew keine Binärpakete mehr für Intel-Macs, und a
 
 1. **Auf Intel-Macs zuverlässig und einfach funktionieren**: ein Installer, keine Bastelei.
 2. **Einfache, gewohnte Befehle bieten**: `mpkg install`, `mpkg search`, `mpkg upgrade`.
-3. **Mehrere Backends nutzen**: native macOS-Pakete (MacPorts), bei Bedarf als Fallback eine leichte Debian-VM.
+3. **Mehrere Backends nutzen**: native macOS-Pakete (Homebrew auf Apple Silicon, MacPorts auf Intel), bei Bedarf als Fallback eine leichte Debian-VM.
 
 ## Code
 
@@ -29,7 +29,8 @@ src/
   vm.rs              Debian-VM: anlegen, starten, ssh-Zugriff (`mpkg vm …`)
   backend/
     mod.rs           Trait `Backend`, Hilfsfunktionen
-    macports.rs      MacPorts-Backend (MVP)
+    homebrew.rs      Homebrew-Backend (nur Apple Silicon)
+    macports.rs      MacPorts-Backend
     linuxvm.rs       VM-Backend: Debian-Pakete im Gast + Shims in ~/.mpkg/bin
 mapping/packages.toml  Mapping-DB v1
 helpers/mpkg-vm/     Swift-Helfer: betreibt die VM über Virtualization.framework
@@ -42,15 +43,24 @@ scripts/build-universal.sh  Universal Binary Intel + Apple Silicon
 curl -fsSL https://raw.githubusercontent.com/Ty-ln/mpkg/main/install.sh | sh
 ```
 
-Das lädt die Universal Binary (Prüfsumme wird geprüft) nach `~/.mpkg/bin`, trägt den PATH ein und startet `mpkg setup`, das MacPorts einrichtet. Deinstallation: `./install.sh --uninstall`.
+Das lädt die Universal Binary (Prüfsumme wird geprüft) nach `~/.mpkg/bin`, trägt den PATH ein und startet `mpkg setup`. Das richtet auf Apple Silicon Homebrew ein (offizielles, signiertes `Homebrew.pkg`; ein vorhandenes Homebrew wird einfach genutzt) und auf Intel MacPorts. Deinstallation: `./install.sh --uninstall`.
+
+### Welche Paketquelle wird benutzt?
+
+| Mac | Reihenfolge |
+|---|---|
+| Apple Silicon | Homebrew → MacPorts (falls installiert) → Debian-VM |
+| Intel | MacPorts → Debian-VM (Homebrew baut für Intel keine Pakete mehr) |
+
+Die Befehle sind überall gleich: `mpkg install ripgrep` ruft auf Apple Silicon im Hintergrund `brew install` auf, auf Intel `port install`. Mit `--backend homebrew|macports|linuxvm` lässt sich die Quelle erzwingen.
 
 ### VM-Fallback (ab macOS 12)
 
-Pakete, die es in MacPorts nicht gibt, installiert mpkg aus Debian in einer leichten VM:
+Pakete, die es nativ (Homebrew/MacPorts) nicht gibt, installiert mpkg aus Debian in einer leichten VM:
 
 ```sh
 mpkg vm create            # einmalig: Debian 13 laden (~400 MB, SHA512-geprüft)
-mpkg install hollywood    # nicht in MacPorts → automatisch über die VM
+mpkg install hollywood    # nativ nicht verfügbar → automatisch über die VM
 mpkg install --backend linuxvm ripgrep   # VM erzwingen
 mpkg vm shell | stop | status
 ```
@@ -85,7 +95,7 @@ cargo run -- --dry-run migrate-from-brew
                                │ Resolver: Name-Mapping + Backend-Wahl
               ┌────────────────┼─────────────────┐
               ▼                ▼                 ▼
-     MacPorts-Binaries   Homebrew (optional,   Debian-amd64/arm64-VM
-     (nativ, Intel +     nur Apple Silicon)    (Fallback, CLI-Tools
-      Apple Silicon)                            über Shims im PATH)
+     Homebrew-Bottles    MacPorts-Binaries    Debian-amd64/arm64-VM
+     (Apple Silicon,     (Intel; auf Apple    (Fallback, CLI-Tools
+      Vorrang)            Silicon optional)    über Shims im PATH)
 ```
