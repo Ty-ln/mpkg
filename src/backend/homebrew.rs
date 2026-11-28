@@ -80,14 +80,30 @@ fn has_usable_bottle<'a>(keys: impl IntoIterator<Item = &'a str>, major: u32) ->
     })
 }
 
-/// Mindest-macOS (Hauptversion) aus `depends_on.macos`, z. B. {">=": ["14"]} → 14.
-/// shortcut: nur ">=" wird ausgewertet (andere Vergleiche nutzt kaum ein Cask) – bei Bedarf ergänzen.
-fn min_macos(cask: &serde_json::Value) -> Option<u32> {
-    cask["depends_on"]["macos"][">="]
-        .as_array()?
+/// Hauptversion aus "14" bzw. "10.15" (→ 10).
+fn major_of(v: &serde_json::Value) -> Option<u32> {
+    v.as_str()?.split('.').next()?.parse().ok()
+}
+
+/// Passt die App laut `depends_on.macos` nicht zu `current`, kommt der Grund zurück.
+/// Homebrew nutzt dort nur zwei Formen: {">=": ["14"]} und {"==": ["11", "12", …]}.
+/// Unbekannte Formen lassen wir durch – `brew install` prüft sie dann selbst.
+fn macos_mismatch(cask: &serde_json::Value, current: u32) -> Option<String> {
+    let req = &cask["depends_on"]["macos"];
+    if let Some(min) = req[">="]
+        .as_array()
+        .and_then(|v| v.iter().filter_map(major_of).min())
+    {
+        return (current < min).then(|| format!("braucht mindestens macOS {min}"));
+    }
+    let allowed: Vec<u32> = req["=="].as_array()?.iter().filter_map(major_of).collect();
+    let list = allowed
         .iter()
-        .filter_map(|v| v.as_str()?.split('.').next()?.parse().ok())
-        .min()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+    (!allowed.is_empty() && !allowed.contains(&current))
+        .then(|| format!("läuft nur auf macOS {list}"))
 }
 
 fn brew(args: &[&str], dry_run: bool) -> Result<()> {
@@ -203,8 +219,8 @@ impl Backend for HomebrewCask {
         let json: serde_json::Value = serde_json::from_slice(&out.stdout)
             .context("Antwort von `brew info --cask` nicht lesbar")?;
         let current = crate::setup::macos_major()?;
-        if let Some(min) = min_macos(&json["casks"][0]).filter(|min| *min > current) {
-            bail!("Die App `{name}` braucht mindestens macOS {min}, hier läuft macOS {current}.");
+        if let Some(reason) = macos_mismatch(&json["casks"][0], current) {
+            bail!("Die App `{name}` {reason}, hier läuft macOS {current}.");
         }
         brew(&["install", "--cask", name], dry_run)
     }
@@ -242,21 +258,38 @@ impl Backend for HomebrewCask {
 
 #[cfg(test)]
 mod tests {
-    use super::{has_usable_bottle, min_macos};
+    use super::{has_usable_bottle, macos_mismatch};
     use serde_json::json;
 
     #[test]
-    fn reads_minimum_macos_of_cask() {
+    fn checks_macos_requirement_of_cask() {
+        let min14 = json!({"depends_on": {"macos": {">=": ["14"]}}});
         assert_eq!(
-            min_macos(&json!({"depends_on": {"macos": {">=": ["14"]}}})),
-            Some(14)
+            macos_mismatch(&min14, 13).as_deref(),
+            Some("braucht mindestens macOS 14")
+        );
+        assert_eq!(macos_mismatch(&min14, 14), None);
+        assert_eq!(
+            macos_mismatch(&json!({"depends_on": {"macos": {">=": ["10.15"]}}}), 12),
+            None
+        );
+
+        let only = json!({"depends_on": {"macos": {"==": ["14", "15"]}}});
+        assert_eq!(macos_mismatch(&only, 15), None);
+        assert_eq!(
+            macos_mismatch(&only, 26).as_deref(),
+            Some("läuft nur auf macOS 14, 15")
+        );
+
+        assert_eq!(
+            macos_mismatch(&json!({"depends_on": {"macos": {}}}), 26),
+            None
         );
         assert_eq!(
-            min_macos(&json!({"depends_on": {"macos": {">=": ["10.15"]}}})),
-            Some(10)
+            macos_mismatch(&json!({"depends_on": {"macos": {"<": ["14"]}}}), 26),
+            None
         );
-        assert_eq!(min_macos(&json!({"depends_on": {"macos": {}}})), None);
-        assert_eq!(min_macos(&json!({})), None);
+        assert_eq!(macos_mismatch(&json!({}), 26), None);
     }
 
     #[test]

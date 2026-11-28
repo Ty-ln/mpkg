@@ -65,7 +65,7 @@ mpkg search firefox           # zeigt Pakete [homebrew] und Apps [homebrew-cask]
 mpkg upgrade                  # aktualisiert Pakete und Apps
 ```
 
-`--cask` muss man angeben, weil manche Namen beides sind (`docker` ist als Paket die Kommandozeile, als App Docker Desktop). Fehlt ein Paket, gibt es aber eine gleichnamige App, schlägt mpkg `--cask` vor. Auf Intel gibt es keine Apps über mpkg: Dort nutzt mpkg Homebrew nicht. Verlangt eine App ein neueres macOS als das installierte, bricht mpkg vor dem Download mit einer klaren Meldung ab.
+`--cask` muss man angeben, weil manche Namen beides sind (`docker` ist als Paket die Kommandozeile, als App Docker Desktop). Fehlt ein Paket, gibt es aber eine gleichnamige App, schlägt mpkg `--cask` vor. Auf Intel gibt es keine Apps über mpkg: Dort nutzt mpkg Homebrew nicht. Passt eine App nicht zur installierten macOS-Version (zu alt oder nur für bestimmte Versionen gebaut), bricht mpkg vor dem Download mit einer klaren Meldung ab.
 
 ### Von Homebrew umsteigen
 

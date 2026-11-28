@@ -146,13 +146,21 @@ impl Resolver {
 
     pub fn install(&self, names: &[String], forced: Option<&str>, dry_run: bool) -> Result<()> {
         for name in names {
-            if forced.is_none() {
-                if let Some(i) = self.state.borrow().get(name) {
-                    println!(
-                        "{name} ist bereits installiert ({} über {})",
-                        i.native, i.backend
-                    );
-                    continue;
+            // Bekannter Name: nicht erneut installieren und vor allem keinen Eintrag eines
+            // anderen Backends überschreiben (z. B. gleichnamige Formel und App aus Drittquellen).
+            if let Some(i) = self.state.borrow().get(name) {
+                match forced {
+                    Some(id) if id != i.backend => bail!(
+                        "`{name}` ist schon über {} installiert. Erst `mpkg remove {name}`, dann erneut installieren.",
+                        i.backend
+                    ),
+                    _ => {
+                        println!(
+                            "{name} ist bereits installiert ({} über {})",
+                            i.native, i.backend
+                        );
+                        continue;
+                    }
                 }
             }
             let c = self.choose(name, forced)?;
@@ -184,7 +192,7 @@ impl Resolver {
     }
 
     /// Bereits vorhandenes Paket in den Status übernehmen, ohne es neu zu installieren.
-    /// Gibt false zurück, wenn mpkg den Namen schon kennt.
+    /// Gibt false zurück, wenn mpkg den Namen schon kennt (auch von einem anderen Backend).
     pub fn adopt(&self, name: &str, backend: &str, native: &str, dry_run: bool) -> Result<bool> {
         let mut state = self.state.borrow_mut();
         if state.get(name).is_some() {

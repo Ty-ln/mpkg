@@ -76,7 +76,8 @@ fn adopt_brew(resolver: &Resolver, dry_run: bool) -> Result<()> {
                 .map(|c| (c.clone(), "homebrew-cask", c.as_str())),
         );
     for (name, backend, native) in entries {
-        // shortcut: gleichnamige Formel und App teilen sich einen Eintrag – die Formel gewinnt.
+        // Gleichnamige Formel und App (nur aus Drittquellen möglich): die Formel wird übernommen,
+        // die App bleibt in Homebrew und erscheint unter „schon bekannt“.
         let added = resolver.adopt(&name, backend, native, dry_run)?;
         if added {
             new += 1;
