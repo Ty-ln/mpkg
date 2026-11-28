@@ -21,8 +21,9 @@ fn main() -> Result<()> {
     let resolver = resolver::Resolver::new(mapping, backend::available_backends(), state);
 
     match cli.command {
-        Command::Install { packages, backend } => {
-            resolver.install(&packages, backend.as_deref(), cli.dry_run)
+        Command::Install { packages, backend, cask } => {
+            let backend = if cask { Some("homebrew-cask") } else { backend.as_deref() };
+            resolver.install(&packages, backend, cli.dry_run)
         }
         Command::Remove { packages } => resolver.remove(&packages, cli.dry_run),
         Command::Search { query } => resolver.search(&query),

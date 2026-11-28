@@ -29,7 +29,7 @@ src/
   vm.rs              Debian-VM: anlegen, starten, ssh-Zugriff (`mpkg vm …`)
   backend/
     mod.rs           Trait `Backend`, Hilfsfunktionen
-    homebrew.rs      Homebrew-Backend (nur Apple Silicon)
+    homebrew.rs      Homebrew-Backends für Pakete und Apps/Casks (nur Apple Silicon)
     macports.rs      MacPorts-Backend
     linuxvm.rs       VM-Backend: Debian-Pakete im Gast + Shims in ~/.mpkg/bin
 mapping/packages.toml  Mapping-DB v1
@@ -53,6 +53,19 @@ Das lädt die Universal Binary (Prüfsumme wird geprüft) nach `~/.mpkg/bin`, tr
 | Intel | MacPorts → Debian-VM (Homebrew baut für Intel keine Pakete mehr) |
 
 Die Befehle sind überall gleich: `mpkg install ripgrep` ruft auf Apple Silicon im Hintergrund `brew install` auf, auf Intel `port install`. Mit `--backend homebrew|macports|linuxvm` lässt sich die Quelle erzwingen.
+
+### Apps (nur Apple Silicon)
+
+Mac-Apps mit Oberfläche kommen als Homebrew-Casks:
+
+```sh
+mpkg install --cask firefox   # App nach /Applications
+mpkg remove firefox           # mpkg weiß, dass es eine App ist
+mpkg search firefox           # zeigt Pakete [homebrew] und Apps [homebrew-cask]
+mpkg upgrade                  # aktualisiert Pakete und Apps
+```
+
+`--cask` muss man angeben, weil manche Namen beides sind (`docker` ist als Paket die Kommandozeile, als App Docker Desktop). Fehlt ein Paket, gibt es aber eine gleichnamige App, schlägt mpkg `--cask` vor. Auf Intel gibt es keine Apps über mpkg: Dort nutzt mpkg Homebrew nicht.
 
 ### VM-Fallback (ab macOS 12)
 

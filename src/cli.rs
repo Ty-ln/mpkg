@@ -18,9 +18,12 @@ pub enum Command {
     Install {
         #[arg(required = true)]
         packages: Vec<String>,
-        /// Backend erzwingen (z. B. `macports`, `linuxvm`)
+        /// Backend erzwingen (z. B. `homebrew`, `macports`, `linuxvm`)
         #[arg(long)]
         backend: Option<String>,
+        /// Mac-App (Homebrew-Cask) installieren, z. B. `--cask firefox` – nur Apple Silicon
+        #[arg(long, conflicts_with = "backend")]
+        cask: bool,
     },
     /// Pakete entfernen
     Remove {

@@ -131,6 +131,70 @@ impl Backend for Homebrew {
     }
 }
 
+/// Casks: fertige Mac-Apps (Firefox, VS Code …) über `brew --cask`. Nur auf Wunsch
+/// (`mpkg install --cask`), weil manche Namen auch Formeln sind (z. B. `docker`).
+pub struct HomebrewCask;
+
+impl Backend for HomebrewCask {
+    fn id(&self) -> &'static str {
+        "homebrew-cask"
+    }
+
+    fn on_request_only(&self) -> bool {
+        true
+    }
+
+    fn is_ready(&self) -> bool {
+        Homebrew.is_ready()
+    }
+
+    /// Casks sind immer fertige Apps. shortcut: `depends_on macos` wird nicht ausgewertet –
+    /// verlangt eine App ein neueres macOS, meldet das erst `brew install`.
+    fn availability(&self, name: &str) -> Result<Availability> {
+        let ok = Command::new(BREW)
+            .args(["info", "--json=v2", "--cask", name])
+            .output()
+            .context("`brew info --cask` fehlgeschlagen")?
+            .status
+            .success();
+        Ok(if ok { Availability::Binary } else { Availability::NotFound })
+    }
+
+    fn install(&self, name: &str, dry_run: bool) -> Result<()> {
+        brew(&["install", "--cask", name], dry_run)
+    }
+
+    fn remove(&self, name: &str, dry_run: bool) -> Result<()> {
+        brew(&["uninstall", "--cask", name], dry_run)
+    }
+
+    fn search(&self, query: &str) -> Result<Vec<String>> {
+        let out = Command::new(BREW)
+            .args(["search", "--cask", query])
+            .output()
+            .context("`brew search --cask` fehlgeschlagen")?;
+        Ok(String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with("==>"))
+            .map(str::to_owned)
+            .collect())
+    }
+
+    fn list(&self) -> Result<()> {
+        brew(&["list", "--cask"], false)
+    }
+
+    /// `brew update` erledigt schon das Formel-Backend – nicht doppelt ausführen.
+    fn update(&self, _dry_run: bool) -> Result<()> {
+        Ok(())
+    }
+
+    fn upgrade(&self, dry_run: bool) -> Result<()> {
+        brew(&["upgrade", "--cask"], dry_run)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::has_usable_bottle;

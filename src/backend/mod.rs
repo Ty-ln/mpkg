@@ -28,6 +28,10 @@ pub trait Backend {
     fn is_fallback(&self) -> bool {
         false
     }
+    /// Nur auf ausdrücklichen Wunsch (z. B. `--cask`), nie bei der automatischen Wahl.
+    fn on_request_only(&self) -> bool {
+        false
+    }
     /// Ist das Backend selbst auf diesem System eingerichtet?
     fn is_ready(&self) -> bool;
     fn availability(&self, name: &str) -> Result<Availability>;
@@ -44,6 +48,7 @@ pub trait Backend {
 pub fn available_backends() -> Vec<Box<dyn Backend>> {
     vec![
         Box::new(homebrew::Homebrew::new()),
+        Box::new(homebrew::HomebrewCask),
         Box::new(macports::MacPorts::new()),
         Box::new(linuxvm::LinuxVm::new()),
     ]

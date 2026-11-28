@@ -63,6 +63,9 @@ impl Resolver {
     pub fn choose(&self, name: &str, forced: Option<&str>) -> Result<Choice<'_>> {
         if let Some(id) = forced {
             let backend = self.backend_by_id(id)?;
+            if !backend.is_ready() {
+                bail!("{}", not_ready_hint(id));
+            }
             let native = self.mapping.name_for(name, backend.id());
             let availability = backend.availability(&native)?;
             return Ok(Choice { backend, native, availability });
@@ -84,6 +87,9 @@ impl Resolver {
 
         let mut best: Option<Choice> = None;
         for backend in self.ready_backends() {
+            if backend.on_request_only() {
+                continue;
+            }
             // Die VM nur fragen (und dafür ggf. starten), wenn nativ kein Binärpaket da ist:
             // gar nichts gefunden, oder nur Quellcode auf einem alten System.
             let native_needs_build = best
@@ -103,7 +109,15 @@ impl Resolver {
                 best = Some(Choice { backend, native, availability });
             }
         }
-        best.ok_or_else(|| anyhow!("Paket `{name}` wurde in keinem Backend gefunden"))
+        best.ok_or_else(|| {
+            let cask = self.ready_backends().into_iter().find(|b| b.on_request_only());
+            match cask {
+                Some(c) if c.availability(name).is_ok_and(|a| a == Availability::Binary) => anyhow!(
+                    "Paket `{name}` wurde in keinem Backend gefunden – es gibt aber die App `{name}`:\n  mpkg install --cask {name}"
+                ),
+                _ => anyhow!("Paket `{name}` wurde in keinem Backend gefunden"),
+            }
+        })
     }
 
     pub fn install(&self, names: &[String], forced: Option<&str>, dry_run: bool) -> Result<()> {
@@ -211,8 +225,23 @@ impl Resolver {
     pub fn print_backends(&self) {
         for backend in &self.backends {
             let state = if backend.is_ready() { "bereit" } else { "nicht eingerichtet" };
-            println!("{:<10} {state}", backend.id());
+            println!("{:<14} {state}", backend.id());
         }
+    }
+}
+
+/// Warum ein erzwungenes Backend nicht nutzbar ist.
+fn not_ready_hint(id: &str) -> String {
+    match id {
+        "homebrew-cask" | "homebrew" => {
+            if std::env::consts::ARCH == "aarch64" {
+                "Homebrew ist nicht installiert – `mpkg setup` richtet es ein.".to_owned()
+            } else {
+                "Homebrew (und damit Apps/Casks) nutzt mpkg nur auf Apple Silicon. Auf Intel baut Homebrew keine Pakete mehr.".to_owned()
+            }
+        }
+        "linuxvm" => "Die VM ist noch nicht angelegt – `mpkg vm create`.".to_owned(),
+        _ => format!("Backend `{id}` ist nicht eingerichtet – `mpkg setup` oder `mpkg doctor`."),
     }
 }
 
