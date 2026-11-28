@@ -15,12 +15,16 @@ pub struct MacPorts {
 
 impl MacPorts {
     pub fn new() -> Self {
-        Self { platform_override: None }
+        Self {
+            platform_override: None,
+        }
     }
 
     /// Prüft Binärpakete für eine fremde Plattform statt für dieses System.
     pub fn with_platform(platform: &str) -> Self {
-        Self { platform_override: Some(platform.to_owned()) }
+        Self {
+            platform_override: Some(platform.to_owned()),
+        }
     }
 }
 
@@ -76,7 +80,9 @@ fn http_request(url: &str, head: bool, timeout_secs: u32) -> Option<(u16, String
             Some((code, body)) if code != 429 && code < 500 => return Some((code, body)),
             result if attempt == 3 => return result,
             _ => {
-                debug(format!("{url} → Versuch {attempt} fehlgeschlagen, wiederhole …"));
+                debug(format!(
+                    "{url} → Versuch {attempt} fehlgeschlagen, wiederhole …"
+                ));
                 std::thread::sleep(std::time::Duration::from_secs(attempt));
             }
         }
@@ -87,7 +93,13 @@ fn http_request(url: &str, head: bool, timeout_secs: u32) -> Option<(u16, String
 fn http_request_once(url: &str, head: bool, timeout_secs: u32) -> Option<(u16, String)> {
     let timeout = timeout_secs.to_string();
     let mut cmd = Command::new("curl");
-    cmd.args(["-sSL", "--max-time", timeout.as_str(), "-w", "\n%{http_code}"]);
+    cmd.args([
+        "-sSL",
+        "--max-time",
+        timeout.as_str(),
+        "-w",
+        "\n%{http_code}",
+    ]);
     if head {
         cmd.args(["-I", "-o", "/dev/null"]);
     }
@@ -97,7 +109,10 @@ fn http_request_once(url: &str, head: bool, timeout_secs: u32) -> Option<(u16, S
     let code: u16 = code.trim().parse().unwrap_or(0);
     if code == 0 {
         // 000 = keine HTTP-Antwort (Timeout, DNS, TLS …)
-        debug(format!("{url} → keine Antwort: {}", String::from_utf8_lossy(&out.stderr).trim()));
+        debug(format!(
+            "{url} → keine Antwort: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
         return None;
     }
     Some((code, body.to_owned()))
@@ -117,7 +132,13 @@ fn url_exists(url: &str) -> Option<bool> {
 
 /// Schneller Weg: exakten Archivnamen bauen und gezielt per HEAD abfragen.
 /// Liefert nur bei einem Treffer ein Ergebnis – sonst entscheidet die Verzeichnisliste.
-fn exact_archive_status(name: &str, version: &str, revision: &str, variants: &str, platform: &str) -> Option<Availability> {
+fn exact_archive_status(
+    name: &str,
+    version: &str,
+    revision: &str,
+    variants: &str,
+    platform: &str,
+) -> Option<Availability> {
     let os = platform.rsplit_once('.').map_or(platform, |(os, _)| os);
     let base = format!("{ARCHIVE_BASE}/{name}/{name}-{version}_{revision}{variants}");
     let suffixes = [
@@ -133,7 +154,9 @@ fn exact_archive_status(name: &str, version: &str, revision: &str, variants: &st
             return Some(Availability::Binary);
         }
     }
-    debug(format!("{name}: kein HEAD-Treffer für {base}… – Fallback auf Verzeichnisliste"));
+    debug(format!(
+        "{name}: kein HEAD-Treffer für {base}… – Fallback auf Verzeichnisliste"
+    ));
     None
 }
 
@@ -149,7 +172,9 @@ fn binary_archive_status(
     platform_override: Option<&str>,
 ) -> Availability {
     let Some(platform) = platform_override.map(str::to_owned).or_else(platform_tag) else {
-        debug(format!("{name}: Plattform-Kennung (uname) nicht ermittelbar"));
+        debug(format!(
+            "{name}: Plattform-Kennung (uname) nicht ermittelbar"
+        ));
         return Availability::Unknown;
     };
 
@@ -200,8 +225,14 @@ fn binary_archive_status(
         let file = &rest[..rest.find(".tbz2").unwrap_or(0)];
         file.contains(&platform) || is_noarch(file, &platform)
     });
-    debug(format!("{name}: ältere Version für `{platform}` vorhanden: {older}"));
-    if older { Availability::OlderBinary } else { Availability::SourceOnly }
+    debug(format!(
+        "{name}: ältere Version für `{platform}` vorhanden: {older}"
+    ));
+    if older {
+        Availability::OlderBinary
+    } else {
+        Availability::SourceOnly
+    }
 }
 
 impl Backend for MacPorts {
@@ -235,8 +266,16 @@ impl Backend for MacPorts {
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
             .unwrap_or_default();
         let variants = default_variants(&variants_out);
-        debug(format!("{name}: version={version} revision={revision} standardvarianten={variants:?}"));
-        Ok(binary_archive_status(name, version, revision, &variants, self.platform_override.as_deref()))
+        debug(format!(
+            "{name}: version={version} revision={revision} standardvarianten={variants:?}"
+        ));
+        Ok(binary_archive_status(
+            name,
+            version,
+            revision,
+            &variants,
+            self.platform_override.as_deref(),
+        ))
     }
 
     fn install(&self, name: &str, dry_run: bool) -> Result<()> {
@@ -286,7 +325,11 @@ impl Backend for MacPorts {
             println!("✓ Alle MacPorts-Pakete sind aktuell.");
             return Ok(());
         }
-        println!("{} veraltete Pakete: {}", outdated.len(), outdated.join(", "));
+        println!(
+            "{} veraltete Pakete: {}",
+            outdated.len(),
+            outdated.join(", ")
+        );
         run("sudo", &[PORT, "-N", "upgrade", "outdated"], dry_run)
     }
 }

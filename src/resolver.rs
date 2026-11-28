@@ -25,7 +25,11 @@ pub struct Choice<'a> {
 
 impl Resolver {
     pub fn new(mapping: MappingDb, backends: Vec<Box<dyn Backend>>, state: State) -> Self {
-        Self { mapping, backends, state: RefCell::new(state) }
+        Self {
+            mapping,
+            backends,
+            state: RefCell::new(state),
+        }
     }
 
     pub fn mapping(&self) -> &MappingDb {
@@ -68,7 +72,11 @@ impl Resolver {
             }
             let native = self.mapping.name_for(name, backend.id());
             let availability = backend.availability(&native)?;
-            return Ok(Choice { backend, native, availability });
+            return Ok(Choice {
+                backend,
+                native,
+                availability,
+            });
         }
 
         self.ensure_any_ready()?;
@@ -92,21 +100,37 @@ impl Resolver {
             }
             // Die VM nur fragen (und dafür ggf. starten), wenn nativ kein Binärpaket da ist:
             // gar nichts gefunden, oder nur Quellcode auf einem alten System.
-            let native_needs_build = best
-                .as_ref()
-                .is_some_and(|b| matches!(b.availability, Availability::SourceOnly | Availability::OlderBinary));
-            if backend.is_fallback() && best.is_some() && !(prefer_vm_over_source && native_needs_build) {
+            let native_needs_build = best.as_ref().is_some_and(|b| {
+                matches!(
+                    b.availability,
+                    Availability::SourceOnly | Availability::OlderBinary
+                )
+            });
+            if backend.is_fallback()
+                && best.is_some()
+                && !(prefer_vm_over_source && native_needs_build)
+            {
                 continue;
             }
             let native = self.mapping.name_for(name, backend.id());
             let availability = backend.availability(&native)?;
             if availability == Availability::Binary {
-                return Ok(Choice { backend, native, availability });
+                return Ok(Choice {
+                    backend,
+                    native,
+                    availability,
+                });
             }
             if availability != Availability::NotFound
-                && best.as_ref().is_none_or(|b| rank(availability) < rank(b.availability))
+                && best
+                    .as_ref()
+                    .is_none_or(|b| rank(availability) < rank(b.availability))
             {
-                best = Some(Choice { backend, native, availability });
+                best = Some(Choice {
+                    backend,
+                    native,
+                    availability,
+                });
             }
         }
         best.ok_or_else(|| {
@@ -124,15 +148,30 @@ impl Resolver {
         for name in names {
             if forced.is_none() {
                 if let Some(i) = self.state.borrow().get(name) {
-                    println!("{name} ist bereits installiert ({} über {})", i.native, i.backend);
+                    println!(
+                        "{name} ist bereits installiert ({} über {})",
+                        i.native, i.backend
+                    );
                     continue;
                 }
             }
             let c = self.choose(name, forced)?;
-            println!("{name} → {} (über {}){}", c.native, c.backend.id(), note(c.availability));
+            println!(
+                "{name} → {} (über {}){}",
+                c.native,
+                c.backend.id(),
+                note(c.availability)
+            );
             let vm_ready = self.ready_backends().iter().any(|b| b.is_fallback());
-            if vm_ready && matches!(c.availability, Availability::SourceOnly | Availability::OlderBinary) {
-                println!("  Tipp: `mpkg install --backend linuxvm {name}` nimmt das fertige Debian-Paket aus der VM.");
+            if vm_ready
+                && matches!(
+                    c.availability,
+                    Availability::SourceOnly | Availability::OlderBinary
+                )
+            {
+                println!(
+                    "  Tipp: `mpkg install --backend linuxvm {name}` nimmt das fertige Debian-Paket aus der VM."
+                );
             }
             c.backend.install(&c.native, dry_run)?;
             if !dry_run {
@@ -142,6 +181,21 @@ impl Resolver {
             }
         }
         Ok(())
+    }
+
+    /// Bereits vorhandenes Paket in den Status übernehmen, ohne es neu zu installieren.
+    /// Gibt false zurück, wenn mpkg den Namen schon kennt.
+    pub fn adopt(&self, name: &str, backend: &str, native: &str, dry_run: bool) -> Result<bool> {
+        let mut state = self.state.borrow_mut();
+        if state.get(name).is_some() {
+            return Ok(false);
+        }
+        if dry_run {
+            return Ok(true);
+        }
+        state.record(name, backend, native);
+        state.save()?;
+        Ok(true)
     }
 
     pub fn remove(&self, names: &[String], dry_run: bool) -> Result<()> {
@@ -184,7 +238,11 @@ impl Resolver {
         }
         for backend in self.ready_backends() {
             let native = self.mapping.name_for(name, backend.id());
-            println!("  {:<10} {native:<20} {:?}", backend.id(), backend.availability(&native)?);
+            println!(
+                "  {:<10} {native:<20} {:?}",
+                backend.id(),
+                backend.availability(&native)?
+            );
         }
         Ok(())
     }
@@ -224,7 +282,11 @@ impl Resolver {
 
     pub fn print_backends(&self) {
         for backend in &self.backends {
-            let state = if backend.is_ready() { "bereit" } else { "nicht eingerichtet" };
+            let state = if backend.is_ready() {
+                "bereit"
+            } else {
+                "nicht eingerichtet"
+            };
             println!("{:<14} {state}", backend.id());
         }
     }

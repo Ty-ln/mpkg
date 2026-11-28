@@ -43,7 +43,10 @@ impl State {
     pub fn load() -> Result<Self> {
         let path = Self::path()?;
         if !path.exists() {
-            return Ok(Self { version: current_version(), ..Self::default() });
+            return Ok(Self {
+                version: current_version(),
+                ..Self::default()
+            });
         }
         let text = std::fs::read_to_string(&path)
             .with_context(|| format!("{} nicht lesbar", path.display()))?;
@@ -75,7 +78,11 @@ impl State {
             .unwrap_or(0);
         self.packages.insert(
             name.to_owned(),
-            Installed { backend: backend.to_owned(), native: native.to_owned(), installed_at },
+            Installed {
+                backend: backend.to_owned(),
+                native: native.to_owned(),
+                installed_at,
+            },
         );
     }
 
@@ -92,7 +99,10 @@ mod tests {
     fn record_and_forget() {
         let mut s = State::default();
         s.record("python3", "macports", "python313");
-        assert_eq!(s.get("python3").map(|i| i.native.as_str()), Some("python313"));
+        assert_eq!(
+            s.get("python3").map(|i| i.native.as_str()),
+            Some("python313")
+        );
         assert!(s.forget("python3").is_some());
         assert!(s.get("python3").is_none());
     }

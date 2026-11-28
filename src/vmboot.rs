@@ -27,8 +27,14 @@ struct Partition {
 }
 
 impl Ext4Read for Partition {
-    fn read(&mut self, start: u64, dst: &mut [u8]) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-        self.file.read_exact_at(dst, self.offset + start).map_err(Into::into)
+    fn read(
+        &mut self,
+        start: u64,
+        dst: &mut [u8],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+        self.file
+            .read_exact_at(dst, self.offset + start)
+            .map_err(Into::into)
     }
 }
 
@@ -40,8 +46,10 @@ fn root_partition_offset(disk: &mut File) -> Result<u64> {
     if &header[..8] != b"EFI PART" {
         bail!("Image hat keine GPT");
     }
-    let u64_at = |b: &[u8], i: usize| u64::from_le_bytes(b[i..i + 8].try_into().unwrap_or_default());
-    let u32_at = |b: &[u8], i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap_or_default());
+    let u64_at =
+        |b: &[u8], i: usize| u64::from_le_bytes(b[i..i + 8].try_into().unwrap_or_default());
+    let u32_at =
+        |b: &[u8], i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap_or_default());
     let entries_lba = u64_at(&header, 72);
     let count = u32_at(&header, 80).min(256) as usize;
     let size = u32_at(&header, 84) as usize;
@@ -71,9 +79,14 @@ fn largest_partition(table: &[u8], entry_size: usize) -> Option<u64> {
 
 /// Neueste "vmlinuz-<version>" in /boot samt passendem "initrd.img-<version>".
 fn newest_kernel(names: &[String]) -> Option<(String, String)> {
-    let version = names.iter().filter_map(|n| n.strip_prefix("vmlinuz-")).max()?;
+    let version = names
+        .iter()
+        .filter_map(|n| n.strip_prefix("vmlinuz-"))
+        .max()?;
     let initrd = format!("initrd.img-{version}");
-    names.contains(&initrd).then(|| (format!("vmlinuz-{version}"), initrd))
+    names
+        .contains(&initrd)
+        .then(|| (format!("vmlinuz-{version}"), initrd))
 }
 
 /// Schreibt vmlinuz und initrd nach `vm_dir`. Auf arm64 erwartet VZLinuxBootLoader einen
@@ -86,22 +99,32 @@ pub fn extract(vm_dir: &Path) -> Result<()> {
 
     let names: Vec<String> = fs
         .read_dir("/boot")?
-        .filter_map(|e| e.ok().and_then(|e| e.file_name().as_str().ok().map(str::to_owned)))
+        .filter_map(|e| {
+            e.ok()
+                .and_then(|e| e.file_name().as_str().ok().map(str::to_owned))
+        })
         .collect();
-    let (kernel, initrd) = newest_kernel(&names).context("kein Kernel mit initrd in /boot gefunden")?;
+    let (kernel, initrd) =
+        newest_kernel(&names).context("kein Kernel mit initrd in /boot gefunden")?;
 
     let kernel_bytes = fs.read(format!("/boot/{kernel}").as_str())?;
     if kernel_bytes.starts_with(&[0x1f, 0x8b]) {
         // gunzip vmlinuz.gz → vmlinuz
         std::fs::write(vm_dir.join("vmlinuz.gz"), &kernel_bytes)?;
-        let status = Command::new("gunzip").arg("-f").arg(vm_dir.join("vmlinuz.gz")).status()?;
+        let status = Command::new("gunzip")
+            .arg("-f")
+            .arg(vm_dir.join("vmlinuz.gz"))
+            .status()?;
         if !status.success() {
             bail!("Kernel konnte nicht entpackt werden");
         }
     } else {
         std::fs::write(vm_dir.join("vmlinuz"), &kernel_bytes)?;
     }
-    std::fs::write(vm_dir.join("initrd"), fs.read(format!("/boot/{initrd}").as_str())?)?;
+    std::fs::write(
+        vm_dir.join("initrd"),
+        fs.read(format!("/boot/{initrd}").as_str())?,
+    )?;
     std::fs::write(vm_dir.join("cmdline"), CMDLINE)?;
     println!("✓ Kernel für den Linux-Bootloader: {kernel}");
     Ok(())
@@ -121,7 +144,12 @@ mod tests {
 
     #[test]
     fn picks_largest_partition() {
-        let table = [entry(2048, 262_143), entry(262_144, 41_943_006), vec![0u8; 128]].concat();
+        let table = [
+            entry(2048, 262_143),
+            entry(262_144, 41_943_006),
+            vec![0u8; 128],
+        ]
+        .concat();
         assert_eq!(largest_partition(&table, 128), Some(262_144 * 512));
         assert_eq!(largest_partition(&[0u8; 256], 128), None);
     }
@@ -138,7 +166,10 @@ mod tests {
         ]
         .map(str::to_owned)
         .to_vec();
-        assert_eq!(newest_kernel(&names), Some(("vmlinuz-6.12.9".into(), "initrd.img-6.12.9".into())));
+        assert_eq!(
+            newest_kernel(&names),
+            Some(("vmlinuz-6.12.9".into(), "initrd.img-6.12.9".into()))
+        );
         assert_eq!(newest_kernel(&["vmlinuz-1".to_owned()]), None);
     }
 }

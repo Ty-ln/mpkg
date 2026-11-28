@@ -92,8 +92,14 @@ mod tests {
 
     #[test]
     fn versioned_names() {
-        assert_eq!(macports_versioned("python@3.12").as_deref(), Some("python312"));
-        assert_eq!(macports_versioned("python-tk@3.14").as_deref(), Some("py314-tkinter"));
+        assert_eq!(
+            macports_versioned("python@3.12").as_deref(),
+            Some("python312")
+        );
+        assert_eq!(
+            macports_versioned("python-tk@3.14").as_deref(),
+            Some("py314-tkinter")
+        );
         assert_eq!(macports_versioned("node@22").as_deref(), Some("nodejs22"));
         assert_eq!(macports_versioned("php@8.3").as_deref(), Some("php83"));
         assert_eq!(macports_versioned("ripgrep"), None);

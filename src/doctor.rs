@@ -15,7 +15,10 @@ pub(crate) const MIGRATION_URL: &str = "https://trac.macports.org/wiki/Migration
 /// „Current platform "darwin 26" does not match expected platform "darwin 25"“ ab.
 /// Some(None) = passt, Some(Some(meldung)) = OS-Upgrade erkannt, None = nicht prüfbar.
 pub(crate) fn macports_platform_mismatch() -> Option<Option<String>> {
-    let out = Command::new(PORT).args(["-q", "installed", "requested"]).output().ok()?;
+    let out = Command::new(PORT)
+        .args(["-q", "installed", "requested"])
+        .output()
+        .ok()?;
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -31,7 +34,9 @@ pub(crate) fn macports_platform_mismatch() -> Option<Option<String>> {
 fn macports_version() -> Option<String> {
     let out = Command::new(PORT).arg("version").output().ok()?;
     let text = String::from_utf8_lossy(&out.stdout);
-    text.trim().strip_prefix("Version:").map(|v| v.trim().to_owned())
+    text.trim()
+        .strip_prefix("Version:")
+        .map(|v| v.trim().to_owned())
 }
 
 fn check(label: &str, ok: bool, hint: &str) {
@@ -62,7 +67,9 @@ fn check_path(entries: &[&str], dir: &str, hint: &str) {
         check(
             &label,
             false,
-            &format!("steht in {file}, ist aber noch nicht geladen – neues Terminal öffnen oder `source {file}`"),
+            &format!(
+                "steht in {file}, ist aber noch nicht geladen – neues Terminal öffnen oder `source {file}`"
+            ),
         );
     } else {
         check(&label, entries.contains(&dir), hint);
@@ -121,18 +128,30 @@ pub fn run() -> Result<()> {
         let brew = Path::new(crate::backend::homebrew::BREW).exists();
         check("Homebrew installiert", brew, "mpkg setup");
         if brew {
-            check_path(&entries, APPLE_SILICON_BREW_BIN, "mpkg setup (oder manuell: eval \"$(/opt/homebrew/bin/brew shellenv)\" in ~/.zprofile)");
+            check_path(
+                &entries,
+                APPLE_SILICON_BREW_BIN,
+                "mpkg setup (oder manuell: eval \"$(/opt/homebrew/bin/brew shellenv)\" in ~/.zprofile)",
+            );
         }
         check_macports(false);
         if Path::new(PORT).exists() {
-            check_path(&entries, MACPORTS_BIN, "export PATH=\"/opt/local/bin:/opt/local/sbin:$PATH\" in ~/.zprofile");
+            check_path(
+                &entries,
+                MACPORTS_BIN,
+                "export PATH=\"/opt/local/bin:/opt/local/sbin:$PATH\" in ~/.zprofile",
+            );
         }
         return Ok(());
     }
 
     // Intel: MacPorts ist das Haupt-Backend.
     check_macports(true);
-    check_path(&entries, MACPORTS_BIN, "mpkg setup (oder manuell: export PATH=\"/opt/local/bin:/opt/local/sbin:$PATH\" in ~/.zprofile)");
+    check_path(
+        &entries,
+        MACPORTS_BIN,
+        "mpkg setup (oder manuell: export PATH=\"/opt/local/bin:/opt/local/sbin:$PATH\" in ~/.zprofile)",
+    );
 
     // Homebrew-Konflikte
     if let Some(brew_bin) = homebrew_bin() {
@@ -141,12 +160,18 @@ pub fn run() -> Result<()> {
         match (brew_idx, macports_idx) {
             (Some(b), Some(m)) if b < m => {
                 println!("  ! Homebrew ({brew_bin}) steht im PATH vor MacPorts.");
-                println!("      → Gleichnamige Programme kommen von Homebrew. Die MacPorts-Zeile in der");
+                println!(
+                    "      → Gleichnamige Programme kommen von Homebrew. Die MacPorts-Zeile in der"
+                );
                 println!("        Shell-Konfiguration hinter `brew shellenv` verschieben.");
             }
-            _ => println!("  ! Homebrew ist ebenfalls installiert – PATH-Reihenfolge ist in Ordnung."),
+            _ => println!(
+                "  ! Homebrew ist ebenfalls installiert – PATH-Reihenfolge ist in Ordnung."
+            ),
         }
-        println!("    Auf Intel baut Homebrew keine neuen Bottles mehr → `mpkg migrate-from-brew`.");
+        println!(
+            "    Auf Intel baut Homebrew keine neuen Bottles mehr → `mpkg migrate-from-brew`."
+        );
     }
     Ok(())
 }

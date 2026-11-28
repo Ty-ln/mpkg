@@ -70,10 +70,15 @@ pub fn run_setup(dry_run: bool) -> Result<()> {
 
     if dry_run {
         if os_upgrade {
-            println!("→ danach müssten die installierten Pakete neu gebaut werden: mpkg migrate-macports");
+            println!(
+                "→ danach müssten die installierten Pakete neu gebaut werden: mpkg migrate-macports"
+            );
         }
         println!("→ würde laden: {}", asset.browser_download_url);
-        println!("→ würde installieren: sudo installer -pkg {} -target /", asset.name);
+        println!(
+            "→ würde installieren: sudo installer -pkg {} -target /",
+            asset.name
+        );
         return ensure_path(true);
     }
 
@@ -82,7 +87,9 @@ pub fn run_setup(dry_run: bool) -> Result<()> {
     ensure_path(false)?;
     run("sudo", &[PORT, "selfupdate"], false)?;
 
-    println!("\n✓ MacPorts ist eingerichtet. Öffne ein neues Terminal oder lade deine Shell-Konfiguration neu.");
+    println!(
+        "\n✓ MacPorts ist eingerichtet. Öffne ein neues Terminal oder lade deine Shell-Konfiguration neu."
+    );
     if os_upgrade {
         println!("\n! Die bisher installierten Pakete wurden für die alte macOS-Version gebaut");
         println!("  und müssen neu installiert werden: mpkg migrate-macports");
@@ -144,9 +151,25 @@ fn install_pkg(asset: &Asset) -> Result<()> {
     let pkg = std::env::temp_dir().join(&asset.name);
     let pkg_str = pkg.to_str().context("ungültiger Temp-Pfad")?;
     // --retry: Installer sind 30+ MB, Abbrüche bei schwachem WLAN sind häufig.
-    run("curl", &["-fL", "--retry", "3", "--progress-bar", "-o", pkg_str, asset.browser_download_url.as_str()], false)?;
+    run(
+        "curl",
+        &[
+            "-fL",
+            "--retry",
+            "3",
+            "--progress-bar",
+            "-o",
+            pkg_str,
+            asset.browser_download_url.as_str(),
+        ],
+        false,
+    )?;
     verify_package(&pkg)?;
-    run("sudo", &["installer", "-pkg", pkg_str, "-target", "/"], false)?;
+    run(
+        "sudo",
+        &["installer", "-pkg", pkg_str, "-target", "/"],
+        false,
+    )?;
     let _ = std::fs::remove_file(&pkg);
     Ok(())
 }
@@ -157,11 +180,20 @@ fn setup_homebrew(dry_run: bool) -> Result<()> {
     if Path::new(brew).exists() {
         println!("✓ Homebrew ist bereits installiert.");
         // Schon im PATH (z. B. über ~/.zshrc)? Dann keine zweite Zeile eintragen.
-        if std::env::var("PATH").unwrap_or_default().split(':').any(|p| p == "/opt/homebrew/bin") {
+        if std::env::var("PATH")
+            .unwrap_or_default()
+            .split(':')
+            .any(|p| p == "/opt/homebrew/bin")
+        {
             println!("✓ /opt/homebrew/bin ist im PATH");
             return Ok(());
         }
-        return ensure_profile_line("/opt/homebrew/bin/brew shellenv", BREW_SHELLENV_LINE, "Homebrew", dry_run);
+        return ensure_profile_line(
+            "/opt/homebrew/bin/brew shellenv",
+            BREW_SHELLENV_LINE,
+            "Homebrew",
+            dry_run,
+        );
     }
     ensure_clt(dry_run)?;
     let release = latest_release(BREW_RELEASES_API)?;
@@ -173,12 +205,27 @@ fn setup_homebrew(dry_run: bool) -> Result<()> {
     println!("Homebrew {}: {}", release.tag_name, asset.name);
     if dry_run {
         println!("→ würde laden: {}", asset.browser_download_url);
-        println!("→ würde installieren: sudo installer -pkg {} -target /", asset.name);
-        return ensure_profile_line("/opt/homebrew/bin/brew shellenv", BREW_SHELLENV_LINE, "Homebrew", true);
+        println!(
+            "→ würde installieren: sudo installer -pkg {} -target /",
+            asset.name
+        );
+        return ensure_profile_line(
+            "/opt/homebrew/bin/brew shellenv",
+            BREW_SHELLENV_LINE,
+            "Homebrew",
+            true,
+        );
     }
     install_pkg(&asset)?;
-    ensure_profile_line("/opt/homebrew/bin/brew shellenv", BREW_SHELLENV_LINE, "Homebrew", false)?;
-    println!("\n✓ Homebrew ist eingerichtet. Öffne ein neues Terminal oder lade deine Shell-Konfiguration neu.");
+    ensure_profile_line(
+        "/opt/homebrew/bin/brew shellenv",
+        BREW_SHELLENV_LINE,
+        "Homebrew",
+        false,
+    )?;
+    println!(
+        "\n✓ Homebrew ist eingerichtet. Öffne ein neues Terminal oder lade deine Shell-Konfiguration neu."
+    );
     Ok(())
 }
 
@@ -209,7 +256,10 @@ fn verify_package(pkg: &Path) -> Result<()> {
         .map(|s| s.success())
         .unwrap_or(false);
     if !ok {
-        bail!("Gatekeeper hat {} abgelehnt – Installation abgebrochen.", pkg.display());
+        bail!(
+            "Gatekeeper hat {} abgelehnt – Installation abgebrochen.",
+            pkg.display()
+        );
     }
     println!("✓ Signatur und Notarisierung geprüft");
     Ok(())
@@ -219,7 +269,11 @@ fn verify_package(pkg: &Path) -> Result<()> {
 pub(crate) fn shell_profile() -> Result<PathBuf> {
     let home = std::env::var_os("HOME").context("HOME nicht gesetzt")?;
     let shell = std::env::var("SHELL").unwrap_or_default();
-    let file = if shell.ends_with("bash") { ".bash_profile" } else { ".zprofile" };
+    let file = if shell.ends_with("bash") {
+        ".bash_profile"
+    } else {
+        ".zprofile"
+    };
     Ok(PathBuf::from(home).join(file))
 }
 
@@ -241,7 +295,10 @@ fn ensure_profile_line(marker: &str, line: &str, name: &str, dry_run: bool) -> R
         return Ok(());
     }
 
-    print!("PATH-Eintrag für {name} in {} ergänzen? [J/n] ", profile.display());
+    print!(
+        "PATH-Eintrag für {name} in {} ergänzen? [J/n] ",
+        profile.display()
+    );
     io::stdout().flush()?;
     let mut answer = String::new();
     io::stdin().read_line(&mut answer)?;

@@ -24,7 +24,9 @@ impl LinuxVm {
 /// bevor der Name in einer entfernten Shell landet.
 fn valid_package(name: &str) -> Result<()> {
     let ok = !name.is_empty()
-        && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "+-.".contains(c));
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "+-.".contains(c));
     if !ok {
         bail!("ungültiger Debian-Paketname `{name}`");
     }
@@ -52,14 +54,21 @@ fn shim_dir() -> Result<PathBuf> {
 /// Programme, die ein installiertes Paket mitbringt (/usr/bin, /usr/sbin, /bin, /sbin, /usr/games).
 fn package_binaries(name: &str) -> Result<Vec<String>> {
     let (ok, out) = vm::exec_output(&format!("dpkg -L {}", quote(name)))?;
-    Ok(if ok { binaries_from_dpkg_list(&out) } else { Vec::new() })
+    Ok(if ok {
+        binaries_from_dpkg_list(&out)
+    } else {
+        Vec::new()
+    })
 }
 
 fn binaries_from_dpkg_list(list: &str) -> Vec<String> {
     list.lines()
         .filter_map(|path| {
             let (dir, file) = path.rsplit_once('/')?;
-            let is_bin = matches!(dir, "/usr/bin" | "/usr/sbin" | "/bin" | "/sbin" | "/usr/games");
+            let is_bin = matches!(
+                dir,
+                "/usr/bin" | "/usr/sbin" | "/bin" | "/sbin" | "/usr/games"
+            );
             (is_bin && !file.is_empty()).then(|| file.to_owned())
         })
         .collect()
@@ -87,7 +96,10 @@ fn write_shims(binaries: &[String]) -> Result<()> {
         let path = dir.join(bin);
         // Nichts überschreiben, das nicht von uns stammt (z. B. mpkg selbst).
         if path.exists() && !is_our_shim(&path) {
-            println!("  ! {} existiert bereits – kein Shim angelegt", path.display());
+            println!(
+                "  ! {} existiert bereits – kein Shim angelegt",
+                path.display()
+            );
             continue;
         }
         std::fs::write(&path, shim_script(mpkg, bin))?;
@@ -125,10 +137,17 @@ impl Backend for LinuxVm {
         if valid_package(name).is_err() {
             return Ok(Availability::NotFound);
         }
-        let query = format!("apt-cache show --no-all-versions {} 2>/dev/null", quote(name));
+        let query = format!(
+            "apt-cache show --no-all-versions {} 2>/dev/null",
+            quote(name)
+        );
         let (ok, out) = vm::exec_output(&query)?;
         // Debian liefert immer fertige Binärpakete.
-        Ok(if ok && !out.trim().is_empty() { Availability::Binary } else { Availability::NotFound })
+        Ok(if ok && !out.trim().is_empty() {
+            Availability::Binary
+        } else {
+            Availability::NotFound
+        })
     }
 
     fn install(&self, name: &str, dry_run: bool) -> Result<()> {
@@ -142,7 +161,11 @@ impl Backend for LinuxVm {
 
     fn remove(&self, name: &str, dry_run: bool) -> Result<()> {
         valid_package(name)?;
-        let binaries = if dry_run { Vec::new() } else { package_binaries(name)? };
+        let binaries = if dry_run {
+            Vec::new()
+        } else {
+            package_binaries(name)?
+        };
         apt(&format!("remove -y {}", quote(name)), dry_run)?;
         remove_shims(&binaries)
     }
@@ -153,7 +176,11 @@ impl Backend for LinuxVm {
             return Ok(Vec::new());
         }
         let (_, out) = vm::exec_output(&format!("apt-cache search --names-only {}", quote(query)))?;
-        Ok(out.lines().filter_map(|l| l.split_whitespace().next()).map(str::to_owned).collect())
+        Ok(out
+            .lines()
+            .filter_map(|l| l.split_whitespace().next())
+            .map(str::to_owned)
+            .collect())
     }
 
     fn list(&self) -> Result<()> {

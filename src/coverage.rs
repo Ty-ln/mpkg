@@ -65,7 +65,11 @@ fn category(outcome: &Outcome) -> &'static str {
 }
 
 fn pct(part: u64, total: u64) -> f64 {
-    if total == 0 { 0.0 } else { part as f64 * 100.0 / total as f64 }
+    if total == 0 {
+        0.0
+    } else {
+        part as f64 * 100.0 / total as f64
+    }
 }
 
 fn fetch_analytics() -> Result<Analytics> {
@@ -74,7 +78,10 @@ fn fetch_analytics() -> Result<Analytics> {
         .output()
         .context("`curl` nicht startbar")?;
     if !out.status.success() {
-        bail!("Homebrew-Statistik nicht abrufbar: {}", String::from_utf8_lossy(&out.stderr).trim());
+        bail!(
+            "Homebrew-Statistik nicht abrufbar: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
     }
     serde_json::from_slice(&out.stdout).context("Homebrew-Statistik nicht lesbar")
 }
@@ -92,7 +99,9 @@ fn check(item: &Item, mapping: &MappingDb, macports: &MacPorts) -> Row {
     }
     let canonical = mapping.canonical_from_brew(&item.formula);
     let native = mapping.name_for(&canonical, "macports");
-    let availability = macports.availability(&native).unwrap_or(Availability::Unknown);
+    let availability = macports
+        .availability(&native)
+        .unwrap_or(Availability::Unknown);
     Row {
         rank: item.number,
         formula: item.formula.clone(),
@@ -102,9 +111,20 @@ fn check(item: &Item, mapping: &MappingDb, macports: &MacPorts) -> Row {
     }
 }
 
-pub fn run(mapping: &MappingDb, top: usize, platform: Option<&str>, report: Option<&str>) -> Result<()> {
+pub fn run(
+    mapping: &MappingDb,
+    top: usize,
+    platform: Option<&str>,
+    report: Option<&str>,
+) -> Result<()> {
     // ".darwin_20.x86_64" und "darwin_20.x86_64" sind beide erlaubt.
-    let platform = platform.map(|p| if p.starts_with('.') { p.to_owned() } else { format!(".{p}") });
+    let platform = platform.map(|p| {
+        if p.starts_with('.') {
+            p.to_owned()
+        } else {
+            format!(".{p}")
+        }
+    });
     let macports = match &platform {
         Some(p) => MacPorts::with_platform(p),
         None => MacPorts::new(),
@@ -117,7 +137,10 @@ pub fn run(mapping: &MappingDb, top: usize, platform: Option<&str>, report: Opti
     let analytics = fetch_analytics()?;
     let items: Vec<Item> = analytics.items.into_iter().take(top).collect();
     let target = platform.as_deref().unwrap_or("dieses System");
-    eprintln!("Prüfe {} Formeln für {target} ({WORKERS} parallel) …", items.len());
+    eprintln!(
+        "Prüfe {} Formeln für {target} ({WORKERS} parallel) …",
+        items.len()
+    );
 
     // Einfacher Arbeits-Pool: jeder Thread holt sich den nächsten Index.
     let next = AtomicUsize::new(0);
@@ -172,7 +195,11 @@ fn render(rows: &[Row], start: &str, end: &str, target: &str) -> String {
     out += "|---|---:|---:|---:|\n";
     for cat in CATEGORIES {
         let (n, inst) = stats(cat);
-        out += &format!("| {cat} | {n} | {:.1} % | {:.1} % |\n", pct(n, total), pct(inst, total_installs));
+        out += &format!(
+            "| {cat} | {n} | {:.1} % | {:.1} % |\n",
+            pct(n, total),
+            pct(inst, total_installs)
+        );
     }
 
     // „Nicht prüfbar“ heißt: Port existiert, nur der Binärpaket-Check scheiterte → installierbar.
@@ -194,13 +221,22 @@ fn render(rows: &[Row], start: &str, end: &str, target: &str) -> String {
 
     // Detail-Listen für alles außer Binärpaketen – das sind die Arbeitspakete.
     for cat in &CATEGORIES[1..] {
-        let list: Vec<&Row> = rows.iter().filter(|r| category(&r.outcome) == *cat).collect();
+        let list: Vec<&Row> = rows
+            .iter()
+            .filter(|r| category(&r.outcome) == *cat)
+            .collect();
         if list.is_empty() {
             continue;
         }
-        out += &format!("\n## {cat} ({})\n\n| Rang | Homebrew | MacPorts-Name | Installationen |\n|---:|---|---|---:|\n", list.len());
+        out += &format!(
+            "\n## {cat} ({})\n\n| Rang | Homebrew | MacPorts-Name | Installationen |\n|---:|---|---|---:|\n",
+            list.len()
+        );
         for r in list {
-            out += &format!("| {} | {} | {} | {} |\n", r.rank, r.formula, r.native, r.installs);
+            out += &format!(
+                "| {} | {} | {} | {} |\n",
+                r.rank, r.formula, r.native, r.installs
+            );
         }
     }
     out

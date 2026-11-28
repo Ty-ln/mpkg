@@ -21,8 +21,16 @@ fn main() -> Result<()> {
     let resolver = resolver::Resolver::new(mapping, backend::available_backends(), state);
 
     match cli.command {
-        Command::Install { packages, backend, cask } => {
-            let backend = if cask { Some("homebrew-cask") } else { backend.as_deref() };
+        Command::Install {
+            packages,
+            backend,
+            cask,
+        } => {
+            let backend = if cask {
+                Some("homebrew-cask")
+            } else {
+                backend.as_deref()
+            };
             resolver.install(&packages, backend, cli.dry_run)
         }
         Command::Remove { packages } => resolver.remove(&packages, cli.dry_run),
@@ -35,9 +43,23 @@ fn main() -> Result<()> {
         Command::Doctor => doctor::run(),
         Command::MigrateFromBrew => migrate::from_brew(&resolver, cli.dry_run),
         Command::MigrateMacports => migrate::macports(cli.dry_run),
-        Command::Coverage { top, platform, intel, report } => {
-            let platform = if intel { Some("darwin_25.x86_64".to_owned()) } else { platform };
-            coverage::run(resolver.mapping(), top, platform.as_deref(), report.as_deref())
+        Command::Coverage {
+            top,
+            platform,
+            intel,
+            report,
+        } => {
+            let platform = if intel {
+                Some("darwin_25.x86_64".to_owned())
+            } else {
+                platform
+            };
+            coverage::run(
+                resolver.mapping(),
+                top,
+                platform.as_deref(),
+                report.as_deref(),
+            )
         }
         Command::Vm { action } => match action {
             VmAction::Create => vm::create(cli.dry_run),

@@ -5,7 +5,7 @@
 //! brew läuft bewusst ohne sudo – /opt/homebrew gehört dem Nutzer.
 
 use super::{Availability, Backend, run};
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use std::path::Path;
 use std::process::Command;
@@ -13,8 +13,14 @@ use std::process::Command;
 pub const BREW: &str = "/opt/homebrew/bin/brew";
 
 /// Bottle-Kennungen von alt nach neu (Schlüssel im JSON: "arm64_<name>").
-const CODENAMES: [(u32, &str); 6] =
-    [(11, "big_sur"), (12, "monterey"), (13, "ventura"), (14, "sonoma"), (15, "sequoia"), (26, "tahoe")];
+const CODENAMES: [(u32, &str); 6] = [
+    (11, "big_sur"),
+    (12, "monterey"),
+    (13, "ventura"),
+    (14, "sonoma"),
+    (15, "sequoia"),
+    (26, "tahoe"),
+];
 
 pub struct Homebrew;
 
@@ -49,9 +55,16 @@ struct BottleSpec {
 /// Position einer macOS-Version in CODENAMES; neuere, noch unbekannte Versionen zählen
 /// als neuer als alle bekannten.
 fn os_rank(major: u32) -> usize {
-    CODENAMES.iter().position(|(m, _)| *m == major).unwrap_or_else(|| {
-        if major > CODENAMES[CODENAMES.len() - 1].0 { CODENAMES.len() } else { 0 }
-    })
+    CODENAMES
+        .iter()
+        .position(|(m, _)| *m == major)
+        .unwrap_or_else(|| {
+            if major > CODENAMES[CODENAMES.len() - 1].0 {
+                CODENAMES.len()
+            } else {
+                0
+            }
+        })
 }
 
 /// Passt eine der Bottles auf dieses System? Homebrew nimmt auch Bottles älterer
@@ -65,6 +78,16 @@ fn has_usable_bottle<'a>(keys: impl IntoIterator<Item = &'a str>, major: u32) ->
                 .and_then(|name| CODENAMES.iter().position(|(_, n)| *n == name))
                 .is_some_and(|rank| rank <= current)
     })
+}
+
+/// Mindest-macOS (Hauptversion) aus `depends_on.macos`, z. B. {">=": ["14"]} → 14.
+/// shortcut: nur ">=" wird ausgewertet (andere Vergleiche nutzt kaum ein Cask) – bei Bedarf ergänzen.
+fn min_macos(cask: &serde_json::Value) -> Option<u32> {
+    cask["depends_on"]["macos"][">="]
+        .as_array()?
+        .iter()
+        .filter_map(|v| v.as_str()?.split('.').next()?.parse().ok())
+        .min()
 }
 
 fn brew(args: &[&str], dry_run: bool) -> Result<()> {
@@ -88,13 +111,22 @@ impl Backend for Homebrew {
         if !out.status.success() {
             return Ok(Availability::NotFound);
         }
-        let info: Info = serde_json::from_slice(&out.stdout).context("Antwort von `brew info` nicht lesbar")?;
+        let info: Info =
+            serde_json::from_slice(&out.stdout).context("Antwort von `brew info` nicht lesbar")?;
         let Some(formula) = info.formulae.first() else {
             return Ok(Availability::NotFound);
         };
-        let keys = formula.bottle.stable.iter().flat_map(|s| s.files.keys().map(String::as_str));
+        let keys = formula
+            .bottle
+            .stable
+            .iter()
+            .flat_map(|s| s.files.keys().map(String::as_str));
         let major = crate::setup::macos_major()?;
-        Ok(if has_usable_bottle(keys, major) { Availability::Binary } else { Availability::SourceOnly })
+        Ok(if has_usable_bottle(keys, major) {
+            Availability::Binary
+        } else {
+            Availability::SourceOnly
+        })
     }
 
     fn install(&self, name: &str, dry_run: bool) -> Result<()> {
@@ -148,8 +180,7 @@ impl Backend for HomebrewCask {
         Homebrew.is_ready()
     }
 
-    /// Casks sind immer fertige Apps. shortcut: `depends_on macos` wird nicht ausgewertet –
-    /// verlangt eine App ein neueres macOS, meldet das erst `brew install`.
+    /// Casks sind immer fertige Apps; das Mindest-macOS prüft `install`.
     fn availability(&self, name: &str) -> Result<Availability> {
         let ok = Command::new(BREW)
             .args(["info", "--json=v2", "--cask", name])
@@ -157,10 +188,24 @@ impl Backend for HomebrewCask {
             .context("`brew info --cask` fehlgeschlagen")?
             .status
             .success();
-        Ok(if ok { Availability::Binary } else { Availability::NotFound })
+        Ok(if ok {
+            Availability::Binary
+        } else {
+            Availability::NotFound
+        })
     }
 
     fn install(&self, name: &str, dry_run: bool) -> Result<()> {
+        let out = Command::new(BREW)
+            .args(["info", "--json=v2", "--cask", name])
+            .output()
+            .context("`brew info --cask` fehlgeschlagen")?;
+        let json: serde_json::Value = serde_json::from_slice(&out.stdout)
+            .context("Antwort von `brew info --cask` nicht lesbar")?;
+        let current = crate::setup::macos_major()?;
+        if let Some(min) = min_macos(&json["casks"][0]).filter(|min| *min > current) {
+            bail!("Die App `{name}` braucht mindestens macOS {min}, hier läuft macOS {current}.");
+        }
         brew(&["install", "--cask", name], dry_run)
     }
 
@@ -197,7 +242,22 @@ impl Backend for HomebrewCask {
 
 #[cfg(test)]
 mod tests {
-    use super::has_usable_bottle;
+    use super::{has_usable_bottle, min_macos};
+    use serde_json::json;
+
+    #[test]
+    fn reads_minimum_macos_of_cask() {
+        assert_eq!(
+            min_macos(&json!({"depends_on": {"macos": {">=": ["14"]}}})),
+            Some(14)
+        );
+        assert_eq!(
+            min_macos(&json!({"depends_on": {"macos": {">=": ["10.15"]}}})),
+            Some(10)
+        );
+        assert_eq!(min_macos(&json!({"depends_on": {"macos": {}}})), None);
+        assert_eq!(min_macos(&json!({})), None);
+    }
 
     #[test]
     fn bottle_for_same_or_older_macos_is_usable() {

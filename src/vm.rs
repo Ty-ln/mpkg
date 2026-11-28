@@ -74,13 +74,18 @@ fn output(program: &str, args: &[&str]) -> Result<String> {
         .output()
         .with_context(|| format!("konnte `{program}` nicht starten"))?;
     if !out.status.success() {
-        bail!("`{program} {}` fehlgeschlagen: {}", args.join(" "), String::from_utf8_lossy(&out.stderr).trim());
+        bail!(
+            "`{program} {}` fehlgeschlagen: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 fn path_str(p: &Path) -> Result<&str> {
-    p.to_str().with_context(|| format!("Pfad ist kein UTF-8: {}", p.display()))
+    p.to_str()
+        .with_context(|| format!("Pfad ist kein UTF-8: {}", p.display()))
 }
 
 /// Lädt das Debian-Image, prüft es und legt Schlüssel, MAC-Adresse und cloud-init-Seed an.
@@ -94,23 +99,37 @@ pub fn create(dry_run: bool) -> Result<()> {
     let archive = format!("debian-13-genericcloud-{}.tar.xz", debian_arch()?);
     let url = format!("{IMAGE_BASE}/{archive}");
     if dry_run {
-        println!("→ würde laden: {url} (~400 MB) und in {} einrichten", dir.display());
+        println!(
+            "→ würde laden: {url} (~400 MB) und in {} einrichten",
+            dir.display()
+        );
         return Ok(());
     }
     // Reste eines abgebrochenen Versuchs verwerfen.
     if dir.exists() {
-        std::fs::remove_dir_all(&dir).with_context(|| format!("{} nicht löschbar", dir.display()))?;
+        std::fs::remove_dir_all(&dir)
+            .with_context(|| format!("{} nicht löschbar", dir.display()))?;
     }
     std::fs::create_dir_all(&dir)?;
 
     let tar = dir.join(&archive);
-    run("curl", &["-fL", "--progress-bar", "-o", path_str(&tar)?, &url], false)?;
+    run(
+        "curl",
+        &["-fL", "--progress-bar", "-o", path_str(&tar)?, &url],
+        false,
+    )?;
     verify_sha512(&tar, &archive)?;
-    run("tar", &["-xJf", path_str(&tar)?, "-C", path_str(&dir)?, "disk.raw"], false)?;
+    run(
+        "tar",
+        &["-xJf", path_str(&tar)?, "-C", path_str(&dir)?, "disk.raw"],
+        false,
+    )?;
     std::fs::remove_file(&tar)?;
 
     // Sparse vergrößern; cloud-init (growpart) erweitert das Root-Dateisystem beim ersten Start.
-    let disk = std::fs::OpenOptions::new().write(true).open(dir.join("disk.raw"))?;
+    let disk = std::fs::OpenOptions::new()
+        .write(true)
+        .open(dir.join("disk.raw"))?;
     if disk.metadata()?.len() < DISK_BYTES {
         disk.set_len(DISK_BYTES)?;
     }
@@ -120,7 +139,21 @@ pub fn create(dry_run: bool) -> Result<()> {
     }
 
     let key = dir.join("id_ed25519");
-    run("ssh-keygen", &["-q", "-t", "ed25519", "-N", "", "-C", "mpkg-vm", "-f", path_str(&key)?], false)?;
+    run(
+        "ssh-keygen",
+        &[
+            "-q",
+            "-t",
+            "ed25519",
+            "-N",
+            "",
+            "-C",
+            "mpkg-vm",
+            "-f",
+            path_str(&key)?,
+        ],
+        false,
+    )?;
     std::fs::write(dir.join("mac"), random_mac()?)?;
     write_seed(&dir)?;
     println!("✓ VM angelegt: {}", dir.display());
@@ -147,7 +180,11 @@ fn random_mac() -> Result<String> {
     let mut bytes = [0u8; 6];
     std::io::Read::read_exact(&mut std::fs::File::open("/dev/urandom")?, &mut bytes)?;
     bytes[0] = (bytes[0] & 0xfc) | 0x02;
-    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(":"))
+    Ok(bytes
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<Vec<_>>()
+        .join(":"))
 }
 
 fn write_seed(dir: &Path) -> Result<()> {
@@ -157,13 +194,29 @@ fn write_seed(dir: &Path) -> Result<()> {
     let seed = dir.join("seed");
     std::fs::create_dir_all(&seed)?;
     let mac = std::fs::read_to_string(dir.join("mac"))?;
-    std::fs::write(seed.join("meta-data"), "instance-id: mpkg-vm-1\nlocal-hostname: mpkg-vm\n")?;
-    std::fs::write(seed.join("user-data"), user_data(&home, &uid, pubkey.trim()))?;
+    std::fs::write(
+        seed.join("meta-data"),
+        "instance-id: mpkg-vm-1\nlocal-hostname: mpkg-vm\n",
+    )?;
+    std::fs::write(
+        seed.join("user-data"),
+        user_data(&home, &uid, pubkey.trim()),
+    )?;
     std::fs::write(seed.join("network-config"), network_config(mac.trim()))?;
     let iso = dir.join("seed.iso");
     run(
         "hdiutil",
-        &["makehybrid", "-quiet", "-iso", "-joliet", "-default-volume-name", "cidata", "-o", path_str(&iso)?, path_str(&seed)?],
+        &[
+            "makehybrid",
+            "-quiet",
+            "-iso",
+            "-joliet",
+            "-default-volume-name",
+            "cidata",
+            "-o",
+            path_str(&iso)?,
+            path_str(&seed)?,
+        ],
         false,
     )
 }
@@ -205,13 +258,21 @@ ethernets:
 }
 
 fn pid() -> Option<u32> {
-    std::fs::read_to_string(dir().ok()?.join("pid")).ok()?.trim().parse().ok()
+    std::fs::read_to_string(dir().ok()?.join("pid"))
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
 }
 
 fn alive(pid: u32) -> bool {
     // shortcut: kill -0 prüft nur, ob die PID existiert; bei PID-Wiederverwendung nach einem
     // Neustart des Macs falsch positiv – dann den Prozessnamen prüfen.
-    Command::new("kill").args(["-0", &pid.to_string()]).stderr(Stdio::null()).status().is_ok_and(|s| s.success())
+    Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
 }
 
 pub fn is_running() -> bool {
@@ -277,28 +338,56 @@ fn wait_ready() -> Result<String> {
         }
         std::thread::sleep(Duration::from_secs(2));
     }
-    bail!("Die VM ist nach {} s nicht erreichbar – siehe {}", BOOT_TIMEOUT.as_secs(), dir()?.join("console.log").display())
+    bail!(
+        "Die VM ist nach {} s nicht erreichbar – siehe {}",
+        BOOT_TIMEOUT.as_secs(),
+        dir()?.join("console.log").display()
+    )
 }
 
 /// IP-Adresse zur MAC aus /var/db/dhcpd_leases. macOS schreibt die MAC ohne führende
 /// Nullen ("hw_address=1,2:3:a4:…"), daher Byte für Byte vergleichen.
 fn lease_ip(leases: &str, mac: &str) -> Option<String> {
-    let parse = |s: &str| -> Option<Vec<u8>> { s.split(':').map(|b| u8::from_str_radix(b, 16).ok()).collect() };
+    let parse = |s: &str| -> Option<Vec<u8>> {
+        s.split(':')
+            .map(|b| u8::from_str_radix(b, 16).ok())
+            .collect()
+    };
     let wanted = parse(mac)?;
     leases.split('}').find_map(|block| {
-        let field = |key: &str| block.lines().find_map(|l| l.trim().strip_prefix(key).map(str::to_owned));
+        let field = |key: &str| {
+            block
+                .lines()
+                .find_map(|l| l.trim().strip_prefix(key).map(str::to_owned))
+        };
         let hw = field("hw_address=")?;
         let hw = hw.split_once(',').map_or(hw.as_str(), |(_, m)| m);
-        (parse(hw)? == wanted).then(|| field("ip_address=")).flatten()
+        (parse(hw)? == wanted)
+            .then(|| field("ip_address="))
+            .flatten()
     })
 }
 
 fn ssh_command(ip: &str, remote: &str, tty: bool) -> Result<Command> {
     let dir = dir()?;
     let mut cmd = Command::new("ssh");
-    cmd.arg("-i").arg(dir.join("id_ed25519"))
-        .arg("-o").arg(format!("UserKnownHostsFile={}", path_str(&dir.join("known_hosts"))?))
-        .args(["-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "LogLevel=ERROR"]);
+    cmd.arg("-i")
+        .arg(dir.join("id_ed25519"))
+        .arg("-o")
+        .arg(format!(
+            "UserKnownHostsFile={}",
+            path_str(&dir.join("known_hosts"))?
+        ))
+        .args([
+            "-o",
+            "StrictHostKeyChecking=accept-new",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=5",
+            "-o",
+            "LogLevel=ERROR",
+        ]);
     cmd.arg(if tty { "-t" } else { "-T" });
     cmd.arg(format!("{GUEST_USER}@{ip}")).arg(remote);
     Ok(cmd)
@@ -313,17 +402,27 @@ pub fn quote(arg: &str) -> String {
 /// geteilten Home liegt.
 pub fn exec_raw(remote: &str) -> Result<ExitStatus> {
     let ip = ensure_running()?;
-    let cwd = std::env::current_dir().ok().and_then(|d| d.to_str().map(quote)).unwrap_or_default();
+    let cwd = std::env::current_dir()
+        .ok()
+        .and_then(|d| d.to_str().map(quote))
+        .unwrap_or_default();
     let line = format!("cd {cwd} 2>/dev/null; {remote}");
     let tty = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
-    ssh_command(&ip, &line, tty)?.status().context("ssh fehlgeschlagen")
+    ssh_command(&ip, &line, tty)?
+        .status()
+        .context("ssh fehlgeschlagen")
 }
 
 /// Befehl im Gast ausführen und die Ausgabe zurückgeben.
 pub fn exec_output(remote: &str) -> Result<(bool, String)> {
     let ip = ensure_running()?;
-    let out = ssh_command(&ip, remote, false)?.output().context("ssh fehlgeschlagen")?;
-    Ok((out.status.success(), String::from_utf8_lossy(&out.stdout).into_owned()))
+    let out = ssh_command(&ip, remote, false)?
+        .output()
+        .context("ssh fehlgeschlagen")?;
+    Ok((
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    ))
 }
 
 pub fn exec(args: &[String]) -> Result<i32> {
@@ -362,7 +461,10 @@ mod tests {
     #[test]
     fn finds_lease_without_leading_zeros() {
         let leases = "{\n\tname=other\n\tip_address=192.168.64.2\n\thw_address=1,aa:bb:cc:dd:ee:ff\n}\n{\n\tname=mpkg-vm\n\tip_address=192.168.64.7\n\thw_address=1,2:a:3c:4:5:6\n\tlease=0x1\n}\n";
-        assert_eq!(lease_ip(leases, "02:0a:3c:04:05:06").as_deref(), Some("192.168.64.7"));
+        assert_eq!(
+            lease_ip(leases, "02:0a:3c:04:05:06").as_deref(),
+            Some("192.168.64.7")
+        );
         assert_eq!(lease_ip(leases, "02:00:00:00:00:01"), None);
     }
 
