@@ -5,34 +5,34 @@ pub mod macports;
 use anyhow::{Context, Result, bail};
 use std::process::Command;
 
-/// Wie ein Paket in einem Backend verfügbar ist.
+/// How a package is available in a backend.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Availability {
-    /// Fertiges Binärpaket vorhanden – schnell und zuverlässig.
+    /// Prebuilt binary package available – fast and reliable.
     Binary,
-    /// Paket existiert, ob es ein Binärpaket gibt, ließ sich nicht prüfen (z. B. offline).
+    /// Package exists; whether there is a binary package could not be checked (e.g. offline).
     Unknown,
-    /// Binärpaket nur für eine ältere Version – die aktuelle wird vermutlich noch gebaut.
-    /// Installation jetzt = Build aus dem Quellcode.
+    /// Binary package only for an older version – the current one is probably still being built.
+    /// Installing now = building from source.
     OlderBinary,
-    /// Nur aus dem Quellcode baubar.
+    /// Can only be built from source.
     SourceOnly,
     NotFound,
 }
 
-/// Gemeinsame Schnittstelle aller Paketquellen.
-/// Neue Backends (Homebrew, Nix, …) implementieren nur diesen Trait.
+/// Common interface of all package sources.
+/// New backends (Nix, …) only implement this trait.
 pub trait Backend {
     fn id(&self) -> &'static str;
-    /// Fallback (VM): nur gefragt, wenn kein natives Backend das Paket hat.
+    /// Fallback (VM): only asked when no native backend has the package.
     fn is_fallback(&self) -> bool {
         false
     }
-    /// Nur auf ausdrücklichen Wunsch (z. B. `--cask`), nie bei der automatischen Wahl.
+    /// Only on explicit request (e.g. `--cask`), never in the automatic choice.
     fn on_request_only(&self) -> bool {
         false
     }
-    /// Ist das Backend selbst auf diesem System eingerichtet?
+    /// Is the backend itself set up on this system?
     fn is_ready(&self) -> bool;
     fn availability(&self, name: &str) -> Result<Availability>;
     fn install(&self, name: &str, dry_run: bool) -> Result<()>;
@@ -43,8 +43,8 @@ pub trait Backend {
     fn upgrade(&self, dry_run: bool) -> Result<()>;
 }
 
-/// Backends in Prioritätsreihenfolge: nativ zuerst, VM als Fallback.
-/// Homebrew ist nur auf Apple Silicon bereit und hat dort Vorrang vor MacPorts.
+/// Backends in priority order: native first, VM as fallback.
+/// Homebrew is only ready on Apple Silicon and takes precedence over MacPorts there.
 pub fn available_backends() -> Vec<Box<dyn Backend>> {
     vec![
         Box::new(homebrew::Homebrew::new()),
@@ -54,7 +54,7 @@ pub fn available_backends() -> Vec<Box<dyn Backend>> {
     ]
 }
 
-/// Externes Programm sichtbar ausführen (mit `--dry-run` nur anzeigen).
+/// Run an external program visibly (with `--dry-run` only show it).
 pub(crate) fn run(program: &str, args: &[&str], dry_run: bool) -> Result<()> {
     println!("→ {} {}", program, args.join(" "));
     if dry_run {
@@ -63,21 +63,21 @@ pub(crate) fn run(program: &str, args: &[&str], dry_run: bool) -> Result<()> {
     let status = Command::new(program)
         .args(args)
         .status()
-        .with_context(|| format!("konnte `{program}` nicht starten"))?;
+        .with_context(|| format!("could not start `{program}`"))?;
     if !status.success() {
-        bail!("`{program}` wurde mit {status} beendet");
+        bail!("`{program}` exited with {status}");
     }
     Ok(())
 }
 
-/// Diagnose-Ausgabe nach stderr, wenn `MPKG_DEBUG` gesetzt ist.
+/// Diagnostic output to stderr when `MPKG_DEBUG` is set.
 pub(crate) fn debug(msg: impl std::fmt::Display) {
     if std::env::var_os("MPKG_DEBUG").is_some() {
         eprintln!("[debug] {msg}");
     }
 }
 
-/// Liegt `program` irgendwo im PATH?
+/// Is `program` anywhere in PATH?
 pub(crate) fn which(program: &str) -> bool {
     std::env::var_os("PATH")
         .map(|paths| std::env::split_paths(&paths).any(|dir| dir.join(program).is_file()))

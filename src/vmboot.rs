@@ -1,12 +1,12 @@
-//! Kernel und initrd aus dem Debian-Image holen – für macOS 12.
+//! Extract kernel and initrd from the Debian image – for macOS 12.
 //!
-//! Erst ab macOS 13 kann Virtualization.framework das Image per EFI booten. Davor geht
-//! nur `VZLinuxBootLoader`, der Kernel und initrd als eigene Dateien braucht. Die liegen
-//! im ext4-Root-Dateisystem des Images unter /boot; wir lesen sie direkt (ohne Mounten).
+//! Virtualization.framework can only boot the image via EFI from macOS 13 on. Before that
+//! only `VZLinuxBootLoader` works, which needs kernel and initrd as separate files. They live
+//! in the image's ext4 root file system under /boot; we read them directly (without mounting).
 //!
-//! shortcut: Kernel und initrd werden einmal beim Anlegen kopiert. Installiert der Gast
-//! später einen neuen Kernel und entfernt den alten, passen die Module nicht mehr –
-//! dann hier nach `apt-get upgrade` neu extrahieren.
+//! shortcut: kernel and initrd are copied once at creation. If the guest later installs
+//! a new kernel and removes the old one, the modules no longer match –
+//! then re-extract here after `apt-get upgrade`.
 
 use anyhow::{Context, Result, bail};
 use ext4_view::{Ext4, Ext4Read};
@@ -17,10 +17,10 @@ use std::path::Path;
 use std::process::Command;
 
 const SECTOR: u64 = 512;
-/// Debian benennt die Root-Partition in der GPT mit Index 1 → /dev/vda1.
+/// Debian gives the root partition index 1 in the GPT → /dev/vda1.
 const CMDLINE: &str = "console=hvc0 root=/dev/vda1 rw";
 
-/// Liest das Image ab einer Byte-Position (Beginn der Partition).
+/// Reads the image from a byte offset (start of the partition).
 struct Partition {
     file: File,
     offset: u64,
@@ -38,13 +38,13 @@ impl Ext4Read for Partition {
     }
 }
 
-/// Start (in Bytes) der größten Partition laut GPT – bei den Debian-Cloud-Images die Root-Partition.
+/// Start (in bytes) of the largest partition according to the GPT – the root partition in the Debian cloud images.
 fn root_partition_offset(disk: &mut File) -> Result<u64> {
     let mut header = [0u8; 92];
     disk.seek(SeekFrom::Start(SECTOR))?;
     disk.read_exact(&mut header)?;
     if &header[..8] != b"EFI PART" {
-        bail!("Image hat keine GPT");
+        bail!("image has no GPT");
     }
     let u64_at =
         |b: &[u8], i: usize| u64::from_le_bytes(b[i..i + 8].try_into().unwrap_or_default());
@@ -54,20 +54,20 @@ fn root_partition_offset(disk: &mut File) -> Result<u64> {
     let count = u32_at(&header, 80).min(256) as usize;
     let size = u32_at(&header, 84) as usize;
     if !(48..=4096).contains(&size) {
-        bail!("ungültige GPT-Eintragsgröße {size}");
+        bail!("invalid GPT entry size {size}");
     }
 
     let mut table = vec![0u8; count * size];
     disk.seek(SeekFrom::Start(entries_lba * SECTOR))?;
     disk.read_exact(&mut table)?;
-    largest_partition(&table, size).context("keine Partition in der GPT gefunden")
+    largest_partition(&table, size).context("no partition found in the GPT")
 }
 
-/// Aus der GPT-Eintragstabelle: Start der größten Partition in Bytes.
+/// From the GPT entry table: start of the largest partition in bytes.
 fn largest_partition(table: &[u8], entry_size: usize) -> Option<u64> {
     table
         .chunks_exact(entry_size)
-        .filter(|e| e[..16].iter().any(|b| *b != 0)) // leerer Typ = unbenutzt
+        .filter(|e| e[..16].iter().any(|b| *b != 0)) // empty type = unused
         .map(|e| {
             let first = u64::from_le_bytes(e[32..40].try_into().unwrap_or_default());
             let last = u64::from_le_bytes(e[40..48].try_into().unwrap_or_default());
@@ -77,7 +77,7 @@ fn largest_partition(table: &[u8], entry_size: usize) -> Option<u64> {
         .map(|(_, first)| first * SECTOR)
 }
 
-/// Neueste "vmlinuz-<version>" in /boot samt passendem "initrd.img-<version>".
+/// Newest "vmlinuz-<version>" in /boot together with the matching "initrd.img-<version>".
 fn newest_kernel(names: &[String]) -> Option<(String, String)> {
     let version = names
         .iter()
@@ -89,13 +89,13 @@ fn newest_kernel(names: &[String]) -> Option<(String, String)> {
         .then(|| (format!("vmlinuz-{version}"), initrd))
 }
 
-/// Schreibt vmlinuz und initrd nach `vm_dir`. Auf arm64 erwartet VZLinuxBootLoader einen
-/// unkomprimierten Kernel, Debian liefert ihn gzip-komprimiert aus.
+/// Writes vmlinuz and initrd to `vm_dir`. On arm64 VZLinuxBootLoader expects an
+/// uncompressed kernel; Debian ships it gzip-compressed.
 pub fn extract(vm_dir: &Path) -> Result<()> {
     let mut disk = File::open(vm_dir.join("disk.raw"))?;
     let offset = root_partition_offset(&mut disk)?;
     let fs = Ext4::load(Box::new(Partition { file: disk, offset }))
-        .context("Root-Dateisystem des Images nicht lesbar")?;
+        .context("cannot read the image's root file system")?;
 
     let names: Vec<String> = fs
         .read_dir("/boot")?
@@ -104,8 +104,7 @@ pub fn extract(vm_dir: &Path) -> Result<()> {
                 .and_then(|e| e.file_name().as_str().ok().map(str::to_owned))
         })
         .collect();
-    let (kernel, initrd) =
-        newest_kernel(&names).context("kein Kernel mit initrd in /boot gefunden")?;
+    let (kernel, initrd) = newest_kernel(&names).context("no kernel with initrd found in /boot")?;
 
     let kernel_bytes = fs.read(format!("/boot/{kernel}").as_str())?;
     if kernel_bytes.starts_with(&[0x1f, 0x8b]) {
@@ -116,7 +115,7 @@ pub fn extract(vm_dir: &Path) -> Result<()> {
             .arg(vm_dir.join("vmlinuz.gz"))
             .status()?;
         if !status.success() {
-            bail!("Kernel konnte nicht entpackt werden");
+            bail!("could not decompress the kernel");
         }
     } else {
         std::fs::write(vm_dir.join("vmlinuz"), &kernel_bytes)?;
@@ -126,7 +125,7 @@ pub fn extract(vm_dir: &Path) -> Result<()> {
         fs.read(format!("/boot/{initrd}").as_str())?,
     )?;
     std::fs::write(vm_dir.join("cmdline"), CMDLINE)?;
-    println!("✓ Kernel für den Linux-Bootloader: {kernel}");
+    println!("✓ Kernel for the Linux boot loader: {kernel}");
     Ok(())
 }
 
@@ -136,7 +135,7 @@ mod tests {
 
     fn entry(first: u64, last: u64) -> Vec<u8> {
         let mut e = vec![0u8; 128];
-        e[0] = 0xaf; // irgendein Typ-GUID ≠ 0
+        e[0] = 0xaf; // any type GUID ≠ 0
         e[32..40].copy_from_slice(&first.to_le_bytes());
         e[40..48].copy_from_slice(&last.to_le_bytes());
         e

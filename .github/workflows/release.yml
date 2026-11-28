@@ -1,5 +1,5 @@
-# Tag `vX.Y.Z` pushen → Universal Binary bauen und als GitHub-Release veröffentlichen.
-# install.sh lädt daraus mpkg-macos-universal.tar.gz (+ .sha256).
+# Push tag `vX.Y.Z` → build the universal binary and publish it as a GitHub release.
+# install.sh downloads mpkg-macos-universal.tar.gz (+ .sha256) from it.
 name: Release
 on:
   push:
@@ -12,12 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: cargo test --locked
-      - name: Tag muss zur Version in Cargo.toml passen
+      - name: Tag must match the version in Cargo.toml
         run: |
           version="v$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
           [ "$version" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME ≠ Cargo.toml $version"; exit 1; }
       - run: ./scripts/release.sh
-      - name: Release veröffentlichen
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

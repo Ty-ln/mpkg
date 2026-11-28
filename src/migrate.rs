@@ -1,5 +1,5 @@
-//! `mpkg migrate-from-brew`: explizit installierte Homebrew-Pakete übernehmen.
-//! `mpkg migrate-macports`: MacPorts nach einem macOS-Upgrade neu aufsetzen.
+//! `mpkg migrate-from-brew`: take over explicitly installed Homebrew packages.
+//! `mpkg migrate-macports`: rebuild MacPorts after a macOS upgrade.
 
 use crate::backend::{Availability, run, which};
 use crate::resolver::{Resolver, note};
@@ -8,10 +8,10 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::process::Command;
 
-/// Ein Eintrag aus `brew leaves`, z. B. "supabase/tap/supabase".
+/// An entry from `brew leaves`, e.g. "supabase/tap/supabase".
 struct BrewPkg {
     name: String,
-    /// Drittanbieter-Tap (z. B. "supabase/tap"); None bei homebrew/core.
+    /// Third-party tap (e.g. "supabase/tap"); None for homebrew/core.
     tap: Option<String>,
 }
 
@@ -32,14 +32,14 @@ fn parse_leaf(line: &str) -> BrewPkg {
     }
 }
 
-/// Zeilen einer brew-Ausgabe (eine pro Paket).
+/// Lines of a brew output (one per package).
 fn brew_lines(args: &[&str]) -> Result<Vec<String>> {
     let out = Command::new("brew")
         .args(args)
         .output()
-        .with_context(|| format!("`brew {}` fehlgeschlagen", args.join(" ")))?;
+        .with_context(|| format!("`brew {}` failed", args.join(" ")))?;
     if !out.status.success() {
-        bail!("`brew {}` fehlgeschlagen", args.join(" "));
+        bail!("`brew {}` failed", args.join(" "));
     }
     Ok(String::from_utf8_lossy(&out.stdout)
         .lines()
@@ -49,14 +49,14 @@ fn brew_lines(args: &[&str]) -> Result<Vec<String>> {
         .collect())
 }
 
-/// Apple Silicon: Homebrew ist selbst das Backend – nichts neu installieren, nur Pakete
-/// und Apps in den mpkg-Status übernehmen, damit `list`/`remove` sie kennen.
+/// Apple Silicon: Homebrew itself is the backend – reinstall nothing, just record packages
+/// and apps in the mpkg state so that `list`/`remove` know them.
 fn adopt_brew(resolver: &Resolver, dry_run: bool) -> Result<()> {
     let formulae = brew_lines(&["leaves"])?;
     let casks = brew_lines(&["list", "--cask"])?;
-    println!("Homebrew ist auf diesem Mac das Backend von mpkg – es wird nichts neu installiert.");
+    println!("Homebrew is mpkg's backend on this Mac – nothing will be reinstalled.");
     println!(
-        "Übernehme {} Pakete und {} Apps in die mpkg-Liste:\n",
+        "Adding {} packages and {} apps to the mpkg list:\n",
         formulae.len(),
         casks.len()
     );
@@ -76,8 +76,8 @@ fn adopt_brew(resolver: &Resolver, dry_run: bool) -> Result<()> {
                 .map(|c| (c.clone(), "homebrew-cask", c.as_str())),
         );
     for (name, backend, native) in entries {
-        // Gleichnamige Formel und App (nur aus Drittquellen möglich): die Formel wird übernommen,
-        // die App bleibt in Homebrew und erscheint unter „schon bekannt“.
+        // Formula and app with the same name (only possible via third-party taps): the formula
+        // is recorded, the app stays in Homebrew and is counted as "already known".
         let added = resolver.adopt(&name, backend, native, dry_run)?;
         if added {
             new += 1;
@@ -86,24 +86,24 @@ fn adopt_brew(resolver: &Resolver, dry_run: bool) -> Result<()> {
             known += 1;
         }
     }
-    println!("\n{new} übernommen · {known} waren schon bekannt");
+    println!("\n{new} added · {known} already known");
     Ok(())
 }
 
 pub fn from_brew(resolver: &Resolver, dry_run: bool) -> Result<()> {
     if !which("brew") {
-        bail!("Homebrew wurde nicht gefunden.");
+        bail!("Homebrew was not found.");
     }
     if std::env::consts::ARCH == "aarch64" && Path::new(crate::backend::homebrew::BREW).exists() {
         return adopt_brew(resolver, dry_run);
     }
     resolver.ensure_any_ready()?;
 
-    // `brew leaves` = nur explizit installierte Formeln, ohne Abhängigkeiten.
+    // `brew leaves` = only explicitly installed formulae, without dependencies.
     let out = Command::new("brew")
         .arg("leaves")
         .output()
-        .context("`brew leaves` fehlgeschlagen")?;
+        .context("`brew leaves` failed")?;
     let leaves: Vec<BrewPkg> = String::from_utf8_lossy(&out.stdout)
         .lines()
         .map(str::trim)
@@ -112,7 +112,7 @@ pub fn from_brew(resolver: &Resolver, dry_run: bool) -> Result<()> {
         .collect();
 
     println!(
-        "{} Homebrew-Pakete gefunden (Binärpakete werden geprüft …):\n",
+        "Found {} Homebrew packages (checking binary packages …):\n",
         leaves.len()
     );
 
@@ -154,63 +154,61 @@ pub fn from_brew(resolver: &Resolver, dry_run: bool) -> Result<()> {
                 Some(tap) => {
                     third_party += 1;
                     println!(
-                        "  ✗ {:<25} → Drittquelle (Tap {tap}), nicht nativ verfügbar",
+                        "  ✗ {:<25} → third-party tap ({tap}), not available natively",
                         pkg.name
                     );
                 }
                 None => {
                     missing += 1;
-                    println!("  ✗ {:<25} → nicht gefunden", pkg.name);
+                    println!("  ✗ {:<25} → not found", pkg.name);
                 }
             },
         }
     }
 
     println!(
-        "\n{binary} als Binärpaket · {unknown} nicht prüfbar · {source} nur aus Quellcode · {third_party} aus Drittquellen · {missing} nicht gefunden"
+        "\n{binary} as binary package · {unknown} not checkable · {source} source only · {third_party} from third-party taps · {missing} not found"
     );
 
-    // Apps gibt es auf Intel über mpkg nicht (MacPorts hat keine, die VM kann keine Mac-Apps).
+    // There are no apps via mpkg on Intel (MacPorts has none, the VM cannot run Mac apps).
     let casks = brew_lines(&["list", "--cask"]).unwrap_or_default();
     if !casks.is_empty() {
         println!(
-            "\n{} Apps (Casks) – auf Intel ohne Ersatz über mpkg:",
+            "\n{} apps (casks) – no replacement via mpkg on Intel:",
             casks.len()
         );
         for c in &casks {
             println!("  · {c}");
         }
-        println!(
-            "  Sie laufen weiter. Updates kommen über die App selbst oder von der Hersteller-Website."
-        );
+        println!("  They keep working. Updates come from the app itself or the vendor's website.");
     }
     if dry_run || to_install.is_empty() {
         return Ok(());
     }
 
     print!(
-        "{} Pakete jetzt installieren? Homebrew bleibt unverändert. [j/N] ",
+        "Install {} packages now? Homebrew stays unchanged. [y/N] ",
         to_install.len()
     );
     io::stdout().flush()?;
     let mut answer = String::new();
     io::stdin().read_line(&mut answer)?;
-    if !matches!(answer.trim(), "j" | "J" | "y" | "Y") {
-        println!("Abgebrochen.");
+    if !matches!(answer.trim(), "y" | "Y") {
+        println!("Aborted.");
         return Ok(());
     }
     resolver.install(&to_install, None, false)
 }
 
-/// Überlässt die Migration `port migrate` (ab MacPorts 2.9): baut MacPorts selbst und die
-/// angeforderten Pakete samt Abhängigkeiten für die neue Plattform neu. Erkennt auch,
-/// wenn nichts zu tun ist, und fragt vor dem Start selbst nach.
+/// Leaves the migration to `port migrate` (MacPorts 2.9+): rebuilds MacPorts itself and the
+/// requested packages with their dependencies for the new platform. It also detects when
+/// there is nothing to do and asks for confirmation itself before starting.
 pub fn macports(dry_run: bool) -> Result<()> {
     const PORT: &str = "/opt/local/bin/port";
     if !Path::new(PORT).exists() {
-        bail!("MacPorts ist nicht installiert – zuerst `mpkg setup`.");
+        bail!("MacPorts is not installed – run `mpkg setup` first.");
     }
-    // Der Neubau von MacPorts braucht Compiler aus den Command Line Tools.
+    // Rebuilding MacPorts needs compilers from the Command Line Tools.
     crate::setup::ensure_clt(dry_run)?;
     run("sudo", &[PORT, "migrate"], dry_run)
 }

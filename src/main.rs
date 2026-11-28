@@ -63,7 +63,7 @@ fn main() -> Result<()> {
         }
         Command::Vm { action } => match action {
             VmAction::Create => vm::create(cli.dry_run),
-            VmAction::Start => vm::ensure_running().map(|ip| println!("✓ VM läuft ({ip})")),
+            VmAction::Start => vm::ensure_running().map(|ip| println!("✓ VM running ({ip})")),
             VmAction::Stop => vm::stop(),
             VmAction::Status => vm::status(),
             VmAction::Exec { command } => std::process::exit(vm::exec(&command)?),

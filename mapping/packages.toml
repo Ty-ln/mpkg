@@ -1,6 +1,6 @@
-# Mapping-DB v1 – kanonischer Name (an Debian angelehnt) → Name je Backend.
-# Fehlt ein Feld, wird der kanonische Name unverändert verwendet.
-# Deckt alle Top-300-Homebrew-Formeln ab, die es in MacPorts unter anderem Namen gibt (Stand 27.11.2026).
+# Mapping DB v1 – canonical name (based on Debian) → name per backend.
+# If a field is missing, the canonical name is used unchanged.
+# Covers all top-300 Homebrew formulae that exist in MacPorts under a different name (as of 2026-11-27).
 
 [packages.python3]
 macports = "python313"
@@ -33,94 +33,94 @@ homebrew = "ffmpeg"
 debian = "ffmpeg"
 
 # ---------------------------------------------------------------------------
-# Mapping-DB v1 – Kandidaten für die 54 nicht gefundenen Top-300-Formeln
-# (Stand 27.11.2026). Kommentar = Sicherheit der Zuordnung:
-#   sicher    = bekannter MacPorts-Name
-#   prüfen    = plausibel, mit `mpkg coverage` / `mpkg show` bestätigen
-# Fehlt ein Eintrag, gibt es (vermutlich) kein MacPorts-Gegenstück.
+# Mapping DB v1 – candidates for the 54 top-300 formulae that were not found
+# (as of 2026-11-27). Comment = confidence of the mapping:
+#   certain   = known MacPorts name
+#   verify    = plausible, confirm with `mpkg coverage` / `mpkg show`
+# If an entry is missing, there is (probably) no MacPorts counterpart.
 # ---------------------------------------------------------------------------
 
-[packages.gnu-tar]              # sicher
+[packages.gnu-tar]              # certain
 macports = "gnutar"
 homebrew = "gnu-tar"
 
-[packages.gnu-sed]              # sicher
+[packages.gnu-sed]              # certain
 macports = "gsed"
 homebrew = "gnu-sed"
 
-[packages.glib]                 # sicher
+[packages.glib]                 # certain
 macports = "glib2"
 homebrew = "glib"
 
-[packages.maven]                # sicher
+[packages.maven]                # certain
 macports = "maven3"
 homebrew = "maven"
 
-[packages.little-cms2]          # sicher
+[packages.little-cms2]          # certain
 macports = "lcms2"
 homebrew = "little-cms2"
 
-[packages.jpeg-xl]              # sicher
+[packages.jpeg-xl]              # certain
 macports = "libjxl"
 homebrew = "jpeg-xl"
 
-[packages.ca-certificates]      # sicher
+[packages.ca-certificates]      # certain
 macports = "curl-ca-bundle"
 homebrew = "ca-certificates"
 
-[packages.sevenzip]             # prüfen
+[packages.sevenzip]             # verify
 macports = "7zip"
 homebrew = "sevenzip"
 
-[packages.mysql]                # prüfen
+[packages.mysql]                # verify
 macports = "mysql8"
 homebrew = "mysql"
 
-[packages.mysql-client]         # prüfen – MacPorts hat kein reines Client-Paket
+[packages.mysql-client]         # verify – MacPorts has no client-only package
 macports = "mysql8"
 homebrew = "mysql-client"
 
-[packages.libpq]                # prüfen – libpq steckt in postgresqlXX
+[packages.libpq]                # verify – libpq is part of postgresqlXX
 macports = "postgresql18"
 homebrew = "libpq"
 
-[packages.ffmpeg-full]          # prüfen – Funktionsumfang über Varianten (+gpl3 …)
+[packages.ffmpeg-full]          # verify – features via variants (+gpl3 …)
 macports = "ffmpeg"
 homebrew = "ffmpeg-full"
 
-[packages.gcc]                  # prüfen – Versionsnummer
+[packages.gcc]                  # verify – version number
 macports = "gcc15"
 homebrew = "gcc"
 
-[packages.llvm]                 # prüfen – Versionsnummer
+[packages.llvm]                 # verify – version number
 macports = "llvm-21"
 homebrew = "llvm"
 
-[packages.clang-format]         # prüfen – clang-format steckt in clang-XX
+[packages.clang-format]         # verify – clang-format is part of clang-XX
 macports = "clang-21"
 homebrew = "clang-format"
 
-[packages.openjdk]              # prüfen – Homebrew „openjdk“ = neueste Version
+[packages.openjdk]              # verify – Homebrew "openjdk" = latest version
 macports = "openjdk25"
 homebrew = "openjdk"
 
-[packages.awscli]               # prüfen – Python-Präfix
+[packages.awscli]               # verify – Python prefix
 macports = "py313-awscli"
 homebrew = "awscli"
 
-[packages.ansible]              # prüfen – Python-Präfix
+[packages.ansible]              # verify – Python prefix
 macports = "py313-ansible"
 homebrew = "ansible"
 
-[packages.virtualenv]           # prüfen – Python-Präfix
+[packages.virtualenv]           # verify – Python prefix
 macports = "py313-virtualenv"
 homebrew = "virtualenv"
 
-[packages.jupyterlab]           # prüfen – Python-Präfix
+[packages.jupyterlab]           # verify – Python prefix
 macports = "py313-jupyterlab"
 homebrew = "jupyterlab"
 
-[packages.tldr]                 # prüfen – Rust-Client
+[packages.tldr]                 # verify – Rust client
 macports = "tealdeer"
 homebrew = "tldr"
 

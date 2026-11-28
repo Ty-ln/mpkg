@@ -1,10 +1,10 @@
 use clap::{Parser, Subcommand};
 
-/// Paketmanager für macOS.
+/// Package manager for macOS.
 #[derive(Parser, Debug)]
 #[command(name = "mpkg", version, about)]
 pub struct Cli {
-    /// Nur anzeigen, was passieren würde – nichts ausführen.
+    /// Only show what would happen – run nothing.
     #[arg(long, global = true)]
     pub dry_run: bool,
 
@@ -14,63 +14,63 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Pakete installieren
+    /// Install packages
     Install {
         #[arg(required = true)]
         packages: Vec<String>,
-        /// Backend erzwingen (z. B. `homebrew`, `macports`, `linuxvm`)
+        /// Force a backend (e.g. `homebrew`, `macports`, `linuxvm`)
         #[arg(long)]
         backend: Option<String>,
-        /// Mac-App (Homebrew-Cask) installieren, z. B. `--cask firefox` – nur Apple Silicon
+        /// Install a Mac app (Homebrew cask), e.g. `--cask firefox` – Apple Silicon only
         #[arg(long, conflicts_with = "backend")]
         cask: bool,
     },
-    /// Pakete entfernen
+    /// Remove packages
     Remove {
         #[arg(required = true)]
         packages: Vec<String>,
     },
-    /// Pakete suchen
+    /// Search for packages
     Search { query: String },
-    /// Details zu einem Paket anzeigen
+    /// Show details about a package
     Show { package: String },
-    /// Über mpkg installierte Pakete auflisten
+    /// List packages installed via mpkg
     List {
-        /// Zusätzlich alle von den Backends angeforderten Pakete zeigen
+        /// Also show all packages requested in the backends
         #[arg(long)]
         all: bool,
     },
-    /// Paketlisten aller Backends aktualisieren
+    /// Refresh the package lists of all backends
     Update,
-    /// Installierte Pakete aktualisieren
+    /// Upgrade installed packages
     Upgrade,
-    /// MacPorts automatisch einrichten (CLT, Installer, PATH)
+    /// Set up the package source automatically (Homebrew on Apple Silicon, MacPorts on Intel)
     Setup,
-    /// System prüfen (CLT, MacPorts, PATH, Konflikte)
+    /// Check the system (CLT, Homebrew/MacPorts, PATH, conflicts)
     Doctor,
-    /// Explizit installierte Homebrew-Pakete übernehmen
+    /// Take over packages and apps installed with Homebrew
     MigrateFromBrew,
-    /// MacPorts und alle Pakete nach einem macOS-Upgrade (oder Umzug auf einen anderen Mac) neu installieren
+    /// Reinstall MacPorts and all packages after a macOS upgrade (or a move to another Mac)
     MigrateMacports,
-    /// Verfügbare Backends anzeigen
+    /// Show the available backends
     Backends,
-    /// Debian-VM für Pakete, die es in MacPorts nicht gibt (Backend `linuxvm`)
+    /// Debian VM for packages not available natively (backend `linuxvm`)
     Vm {
         #[command(subcommand)]
         action: VmAction,
     },
-    /// MacPorts-Abdeckung der meistgenutzten Homebrew-Formeln messen
+    /// Measure MacPorts coverage of the most-used Homebrew formulae
     Coverage {
-        /// Anzahl der Formeln (nach Beliebtheit)
+        /// Number of formulae (by popularity)
         #[arg(long, default_value_t = 300)]
         top: usize,
-        /// Ziel-Plattform, z. B. darwin_20.x86_64 (Big Sur Intel) … darwin_25.x86_64 (Tahoe Intel)
+        /// Target platform, e.g. darwin_20.x86_64 (Big Sur Intel) … darwin_25.x86_64 (Tahoe Intel)
         #[arg(long, conflicts_with = "intel")]
         platform: Option<String>,
-        /// Kurzform für --platform darwin_25.x86_64 (macOS 26 Tahoe auf Intel)
+        /// Shorthand for --platform darwin_25.x86_64 (macOS 26 Tahoe on Intel)
         #[arg(long)]
         intel: bool,
-        /// Vollständigen Bericht als Markdown-Datei speichern
+        /// Save the full report as a Markdown file
         #[arg(long)]
         report: Option<String>,
     },
@@ -78,19 +78,19 @@ pub enum Command {
 
 #[derive(Subcommand, Debug)]
 pub enum VmAction {
-    /// Debian-Image laden und die VM einrichten (einmalig, ~400 MB)
+    /// Download the Debian image and set up the VM (once, ~400 MB)
     Create,
-    /// VM starten (passiert sonst automatisch bei Bedarf)
+    /// Start the VM (otherwise happens automatically when needed)
     Start,
-    /// VM herunterfahren
+    /// Shut down the VM
     Stop,
-    /// Zustand der VM anzeigen
+    /// Show the VM's state
     Status,
-    /// Befehl in der VM ausführen (nutzen die Shims in ~/.mpkg/bin)
+    /// Run a command in the VM (used by the shims in ~/.mpkg/bin)
     Exec {
         #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
     },
-    /// Shell in der VM öffnen
+    /// Open a shell in the VM
     Shell,
 }

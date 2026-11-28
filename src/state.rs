@@ -1,7 +1,7 @@
-//! Status-Datenbank: welches Paket wurde über welches Backend installiert.
+//! State database: which package was installed via which backend.
 //!
-//! Liegt in `~/.mpkg/state.json`. Wird atomar geschrieben (temporäre Datei + rename),
-//! damit ein Abbruch nie eine halbe Datei hinterlässt.
+//! Lives in `~/.mpkg/state.json`. Written atomically (temporary file + rename),
+//! so an interruption never leaves a half-written file.
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -11,20 +11,20 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Installed {
-    /// Backend-ID, z. B. "macports"
+    /// Backend ID, e.g. "macports"
     pub backend: String,
-    /// Name im Backend, z. B. "python312"
+    /// Name in the backend, e.g. "python312"
     pub native: String,
-    /// Unix-Zeitstempel der Installation
+    /// Unix timestamp of the installation
     pub installed_at: u64,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct State {
-    /// Format-Version, falls sich die Struktur später ändert.
+    /// Format version, in case the structure changes later.
     #[serde(default = "current_version")]
     pub version: u32,
-    /// Kanonischer mpkg-Name → Installationsinfo (sortiert für stabile Ausgabe).
+    /// Canonical mpkg name → install info (sorted for stable output).
     #[serde(default)]
     pub packages: BTreeMap<String, Installed>,
 }
@@ -35,11 +35,11 @@ fn current_version() -> u32 {
 
 impl State {
     pub fn path() -> Result<PathBuf> {
-        let home = std::env::var_os("HOME").context("HOME nicht gesetzt")?;
+        let home = std::env::var_os("HOME").context("HOME is not set")?;
         Ok(PathBuf::from(home).join(".mpkg/state.json"))
     }
 
-    /// Lädt den Status; fehlt die Datei, beginnt er leer.
+    /// Loads the state; if the file is missing, it starts empty.
     pub fn load() -> Result<Self> {
         let path = Self::path()?;
         if !path.exists() {
@@ -49,21 +49,21 @@ impl State {
             });
         }
         let text = std::fs::read_to_string(&path)
-            .with_context(|| format!("{} nicht lesbar", path.display()))?;
-        serde_json::from_str(&text).with_context(|| format!("{} ist beschädigt", path.display()))
+            .with_context(|| format!("cannot read {}", path.display()))?;
+        serde_json::from_str(&text).with_context(|| format!("{} is corrupted", path.display()))
     }
 
     pub fn save(&self) -> Result<()> {
         let path = Self::path()?;
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)
-                .with_context(|| format!("{} nicht anlegbar", dir.display()))?;
+                .with_context(|| format!("cannot create {}", dir.display()))?;
         }
         let tmp = path.with_extension("json.tmp");
         std::fs::write(&tmp, serde_json::to_string_pretty(self)?)
-            .with_context(|| format!("{} nicht schreibbar", tmp.display()))?;
+            .with_context(|| format!("cannot write {}", tmp.display()))?;
         std::fs::rename(&tmp, &path)
-            .with_context(|| format!("{} nicht ersetzbar", path.display()))?;
+            .with_context(|| format!("cannot replace {}", path.display()))?;
         Ok(())
     }
 

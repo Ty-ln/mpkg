@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Baut das Release-Archiv für install.sh:
+# Builds the release archive for install.sh:
 #   dist/mpkg-macos-universal.tar.gz
 #   dist/mpkg-macos-universal.tar.gz.sha256
 set -euo pipefail
@@ -14,8 +14,8 @@ tar -czf "dist/$ASSET" -C target/universal mpkg mpkg-vm
 
 VERSION="v$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
 echo
-echo "Release $VERSION gebaut:"
+echo "Release $VERSION built:"
 ls -lh dist/
 echo
-echo "Veröffentlichen (GitHub CLI):"
+echo "Publish (GitHub CLI):"
 echo "  gh release create $VERSION dist/$ASSET dist/$ASSET.sha256 --title \"mpkg $VERSION\""

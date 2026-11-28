@@ -1,11 +1,11 @@
-//! Zuordnung von Paketnamen zwischen Debian, Homebrew und MacPorts.
+//! Mapping of package names between Debian, Homebrew and MacPorts.
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// Mitgelieferte Basis-Datenbank.
+/// Built-in base database.
 const BUILTIN: &str = include_str!("../mapping/packages.toml");
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -21,7 +21,7 @@ pub struct MappingDb {
     packages: HashMap<String, Entry>,
 }
 
-/// Regel für versionierte Homebrew-Namen → MacPorts:
+/// Rule for versioned Homebrew names → MacPorts:
 ///   python@3.12    → python312
 ///   python-tk@3.14 → py314-tkinter
 ///   node@22        → nodejs22
@@ -38,17 +38,17 @@ fn macports_versioned(name: &str) -> Option<String> {
 }
 
 impl MappingDb {
-    /// Lädt die eingebaute DB und legt `~/.mpkg/mapping.toml` (falls vorhanden) darüber.
+    /// Loads the built-in DB and layers `~/.mpkg/mapping.toml` (if present) on top.
     pub fn load_default() -> Result<Self> {
         let mut db: MappingDb =
-            toml::from_str(BUILTIN).context("eingebaute Mapping-DB ist ungültig")?;
+            toml::from_str(BUILTIN).context("built-in mapping DB is invalid")?;
 
         if let Some(home) = std::env::var_os("HOME") {
             let user_file = PathBuf::from(home).join(".mpkg/mapping.toml");
             if user_file.exists() {
                 let text = std::fs::read_to_string(&user_file)?;
                 let user: MappingDb = toml::from_str(&text)
-                    .with_context(|| format!("{} ist ungültig", user_file.display()))?;
+                    .with_context(|| format!("{} is invalid", user_file.display()))?;
                 db.packages.extend(user.packages);
             }
         }
@@ -59,8 +59,8 @@ impl MappingDb {
         self.packages.get(name)
     }
 
-    /// Name des Pakets im jeweiligen Backend.
-    /// Reihenfolge: expliziter Eintrag → Regel für versionierte Namen → Name unverändert.
+    /// Name of the package in the given backend.
+    /// Order: explicit entry → rule for versioned names → name unchanged.
     pub fn name_for(&self, name: &str, backend: &str) -> String {
         let explicit = self.packages.get(name).and_then(|e| match backend {
             "macports" => e.macports.clone(),
@@ -76,7 +76,7 @@ impl MappingDb {
             .unwrap_or_else(|| name.to_owned())
     }
 
-    /// Homebrew-Name → kanonischer mpkg-Name.
+    /// Homebrew name → canonical mpkg name.
     pub fn canonical_from_brew(&self, brew_name: &str) -> String {
         self.packages
             .iter()

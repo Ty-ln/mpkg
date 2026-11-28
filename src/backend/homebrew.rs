@@ -1,8 +1,8 @@
-//! Backend Homebrew – nur auf Apple Silicon.
+//! Homebrew backend – Apple Silicon only.
 //!
-//! Auf Intel baut Homebrew keine Bottles mehr; dort bleibt es bei MacPorts. Auf Apple
-//! Silicon ist Homebrew das erste Backend, MacPorts (falls installiert) und die VM folgen.
-//! brew läuft bewusst ohne sudo – /opt/homebrew gehört dem Nutzer.
+//! Homebrew no longer builds bottles for Intel; there mpkg sticks with MacPorts. On Apple
+//! Silicon Homebrew is the first backend, followed by MacPorts (if installed) and the VM.
+//! brew deliberately runs without sudo – /opt/homebrew belongs to the user.
 
 use super::{Availability, Backend, run};
 use anyhow::{Context, Result, bail};
@@ -12,7 +12,7 @@ use std::process::Command;
 
 pub const BREW: &str = "/opt/homebrew/bin/brew";
 
-/// Bottle-Kennungen von alt nach neu (Schlüssel im JSON: "arm64_<name>").
+/// Bottle tags from old to new (keys in the JSON: "arm64_<name>").
 const CODENAMES: [(u32, &str); 6] = [
     (11, "big_sur"),
     (12, "monterey"),
@@ -52,8 +52,8 @@ struct BottleSpec {
     files: std::collections::HashMap<String, serde::de::IgnoredAny>,
 }
 
-/// Position einer macOS-Version in CODENAMES; neuere, noch unbekannte Versionen zählen
-/// als neuer als alle bekannten.
+/// Position of a macOS version in CODENAMES; newer, not yet known versions count as
+/// newer than all known ones.
 fn os_rank(major: u32) -> usize {
     CODENAMES
         .iter()
@@ -67,8 +67,8 @@ fn os_rank(major: u32) -> usize {
         })
 }
 
-/// Passt eine der Bottles auf dieses System? Homebrew nimmt auch Bottles älterer
-/// macOS-Versionen, aber nie neuerer.
+/// Does one of the bottles fit this system? Homebrew also uses bottles of older
+/// macOS versions, but never of newer ones.
 fn has_usable_bottle<'a>(keys: impl IntoIterator<Item = &'a str>, major: u32) -> bool {
     let current = os_rank(major);
     keys.into_iter().any(|key| {
@@ -80,21 +80,21 @@ fn has_usable_bottle<'a>(keys: impl IntoIterator<Item = &'a str>, major: u32) ->
     })
 }
 
-/// Hauptversion aus "14" bzw. "10.15" (→ 10).
+/// Major version from "14" or "10.15" (→ 10).
 fn major_of(v: &serde_json::Value) -> Option<u32> {
     v.as_str()?.split('.').next()?.parse().ok()
 }
 
-/// Passt die App laut `depends_on.macos` nicht zu `current`, kommt der Grund zurück.
-/// Homebrew nutzt dort nur zwei Formen: {">=": ["14"]} und {"==": ["11", "12", …]}.
-/// Unbekannte Formen lassen wir durch – `brew install` prüft sie dann selbst.
+/// If the app does not fit `current` according to `depends_on.macos`, returns the reason.
+/// Homebrew only uses two forms there: {">=": ["14"]} and {"==": ["11", "12", …]}.
+/// Unknown forms are let through – `brew install` then checks them itself.
 fn macos_mismatch(cask: &serde_json::Value, current: u32) -> Option<String> {
     let req = &cask["depends_on"]["macos"];
     if let Some(min) = req[">="]
         .as_array()
         .and_then(|v| v.iter().filter_map(major_of).min())
     {
-        return (current < min).then(|| format!("braucht mindestens macOS {min}"));
+        return (current < min).then(|| format!("needs at least macOS {min}"));
     }
     let allowed: Vec<u32> = req["=="].as_array()?.iter().filter_map(major_of).collect();
     let list = allowed
@@ -103,7 +103,7 @@ fn macos_mismatch(cask: &serde_json::Value, current: u32) -> Option<String> {
         .collect::<Vec<_>>()
         .join(", ");
     (!allowed.is_empty() && !allowed.contains(&current))
-        .then(|| format!("läuft nur auf macOS {list}"))
+        .then(|| format!("only runs on macOS {list}"))
 }
 
 fn brew(args: &[&str], dry_run: bool) -> Result<()> {
@@ -123,12 +123,12 @@ impl Backend for Homebrew {
         let out = Command::new(BREW)
             .args(["info", "--json=v2", "--formula", name])
             .output()
-            .context("`brew info` fehlgeschlagen")?;
+            .context("`brew info` failed")?;
         if !out.status.success() {
             return Ok(Availability::NotFound);
         }
         let info: Info =
-            serde_json::from_slice(&out.stdout).context("Antwort von `brew info` nicht lesbar")?;
+            serde_json::from_slice(&out.stdout).context("could not read the `brew info` output")?;
         let Some(formula) = info.formulae.first() else {
             return Ok(Availability::NotFound);
         };
@@ -157,7 +157,7 @@ impl Backend for Homebrew {
         let out = Command::new(BREW)
             .args(["search", "--formula", query])
             .output()
-            .context("`brew search` fehlgeschlagen")?;
+            .context("`brew search` failed")?;
         Ok(String::from_utf8_lossy(&out.stdout)
             .lines()
             .map(str::trim)
@@ -179,8 +179,8 @@ impl Backend for Homebrew {
     }
 }
 
-/// Casks: fertige Mac-Apps (Firefox, VS Code …) über `brew --cask`. Nur auf Wunsch
-/// (`mpkg install --cask`), weil manche Namen auch Formeln sind (z. B. `docker`).
+/// Casks: ready-made Mac apps (Firefox, VS Code …) via `brew --cask`. Only on request
+/// (`mpkg install --cask`), because a name could also be a formula.
 pub struct HomebrewCask;
 
 impl Backend for HomebrewCask {
@@ -196,12 +196,12 @@ impl Backend for HomebrewCask {
         Homebrew.is_ready()
     }
 
-    /// Casks sind immer fertige Apps; das Mindest-macOS prüft `install`.
+    /// Casks are always ready-made apps; `install` checks the required macOS version.
     fn availability(&self, name: &str) -> Result<Availability> {
         let ok = Command::new(BREW)
             .args(["info", "--json=v2", "--cask", name])
             .output()
-            .context("`brew info --cask` fehlgeschlagen")?
+            .context("`brew info --cask` failed")?
             .status
             .success();
         Ok(if ok {
@@ -215,12 +215,12 @@ impl Backend for HomebrewCask {
         let out = Command::new(BREW)
             .args(["info", "--json=v2", "--cask", name])
             .output()
-            .context("`brew info --cask` fehlgeschlagen")?;
+            .context("`brew info --cask` failed")?;
         let json: serde_json::Value = serde_json::from_slice(&out.stdout)
-            .context("Antwort von `brew info --cask` nicht lesbar")?;
+            .context("could not read the `brew info --cask` output")?;
         let current = crate::setup::macos_major()?;
         if let Some(reason) = macos_mismatch(&json["casks"][0], current) {
-            bail!("Die App `{name}` {reason}, hier läuft macOS {current}.");
+            bail!("The app `{name}` {reason}; this Mac runs macOS {current}.");
         }
         brew(&["install", "--cask", name], dry_run)
     }
@@ -233,7 +233,7 @@ impl Backend for HomebrewCask {
         let out = Command::new(BREW)
             .args(["search", "--cask", query])
             .output()
-            .context("`brew search --cask` fehlgeschlagen")?;
+            .context("`brew search --cask` failed")?;
         Ok(String::from_utf8_lossy(&out.stdout)
             .lines()
             .map(str::trim)
@@ -246,7 +246,7 @@ impl Backend for HomebrewCask {
         brew(&["list", "--cask"], false)
     }
 
-    /// `brew update` erledigt schon das Formel-Backend – nicht doppelt ausführen.
+    /// `brew update` is already done by the formula backend – do not run it twice.
     fn update(&self, _dry_run: bool) -> Result<()> {
         Ok(())
     }
@@ -266,7 +266,7 @@ mod tests {
         let min14 = json!({"depends_on": {"macos": {">=": ["14"]}}});
         assert_eq!(
             macos_mismatch(&min14, 13).as_deref(),
-            Some("braucht mindestens macOS 14")
+            Some("needs at least macOS 14")
         );
         assert_eq!(macos_mismatch(&min14, 14), None);
         assert_eq!(
@@ -278,7 +278,7 @@ mod tests {
         assert_eq!(macos_mismatch(&only, 15), None);
         assert_eq!(
             macos_mismatch(&only, 26).as_deref(),
-            Some("läuft nur auf macOS 14, 15")
+            Some("only runs on macOS 14, 15")
         );
 
         assert_eq!(
@@ -295,9 +295,9 @@ mod tests {
     #[test]
     fn bottle_for_same_or_older_macos_is_usable() {
         assert!(has_usable_bottle(["arm64_tahoe"], 26));
-        assert!(has_usable_bottle(["arm64_sonoma", "sonoma"], 15)); // ältere Bottle passt
+        assert!(has_usable_bottle(["arm64_sonoma", "sonoma"], 15)); // an older bottle fits
         assert!(has_usable_bottle(["all"], 13));
-        assert!(has_usable_bottle(["arm64_tahoe"], 27)); // noch unbekannte, neuere Version
+        assert!(has_usable_bottle(["arm64_tahoe"], 27)); // newer, not yet known version
     }
 
     #[test]

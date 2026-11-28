@@ -1,7 +1,7 @@
-//! `mpkg coverage`: misst, wie viele der meistgenutzten Homebrew-Formeln
-//! MacPorts abdeckt – auf diesem System oder für eine andere Plattform (z. B. Intel).
+//! `mpkg coverage`: measures how many of the most-used Homebrew formulae MacPorts
+//! covers – on this system or for another platform (e.g. Intel).
 //!
-//! Quelle: Homebrews öffentliche Statistik „install-on-request“ der letzten 30 Tage.
+//! Source: Homebrew's public "install-on-request" analytics for the last 30 days.
 
 use crate::backend::macports::MacPorts;
 use crate::backend::{Availability, Backend};
@@ -26,13 +26,13 @@ struct Analytics {
 struct Item {
     number: u32,
     formula: String,
-    /// String mit Tausendertrennern, z. B. "315,023"
+    /// String with thousands separators, e.g. "315,023"
     count: String,
 }
 
 enum Outcome {
     Checked(Availability),
-    /// Formel aus einem Drittanbieter-Tap ("user/tap/name")
+    /// Formula from a third-party tap ("user/tap/name")
     ThirdParty,
 }
 
@@ -45,12 +45,12 @@ struct Row {
 }
 
 const CATEGORIES: [&str; 6] = [
-    "Binärpaket",
-    "Binärpaket nur für Vorversion",
-    "Nur Quellcode",
-    "Nicht prüfbar",
-    "Nicht in MacPorts",
-    "Drittquelle (Tap)",
+    "Binary package",
+    "Binary package only for previous version",
+    "Source only",
+    "Not checkable",
+    "Not in MacPorts",
+    "Third-party tap",
 ];
 
 fn category(outcome: &Outcome) -> &'static str {
@@ -76,14 +76,14 @@ fn fetch_analytics() -> Result<Analytics> {
     let out = Command::new("curl")
         .args(["-fsSL", "--max-time", "60", ANALYTICS_URL])
         .output()
-        .context("`curl` nicht startbar")?;
+        .context("could not start `curl`")?;
     if !out.status.success() {
         bail!(
-            "Homebrew-Statistik nicht abrufbar: {}",
+            "could not fetch Homebrew analytics: {}",
             String::from_utf8_lossy(&out.stderr).trim()
         );
     }
-    serde_json::from_slice(&out.stdout).context("Homebrew-Statistik nicht lesbar")
+    serde_json::from_slice(&out.stdout).context("could not read Homebrew analytics")
 }
 
 fn check(item: &Item, mapping: &MappingDb, macports: &MacPorts) -> Row {
@@ -117,7 +117,7 @@ pub fn run(
     platform: Option<&str>,
     report: Option<&str>,
 ) -> Result<()> {
-    // ".darwin_20.x86_64" und "darwin_20.x86_64" sind beide erlaubt.
+    // ".darwin_20.x86_64" and "darwin_20.x86_64" are both accepted.
     let platform = platform.map(|p| {
         if p.starts_with('.') {
             p.to_owned()
@@ -130,19 +130,19 @@ pub fn run(
         None => MacPorts::new(),
     };
     if !macports.is_ready() {
-        bail!("MacPorts ist nicht installiert – zuerst `mpkg setup` ausführen.");
+        bail!("MacPorts is not installed – run `mpkg setup` first.");
     }
 
-    eprintln!("Lade Homebrew-Statistik …");
+    eprintln!("Fetching Homebrew analytics …");
     let analytics = fetch_analytics()?;
     let items: Vec<Item> = analytics.items.into_iter().take(top).collect();
-    let target = platform.as_deref().unwrap_or("dieses System");
+    let target = platform.as_deref().unwrap_or("this system");
     eprintln!(
-        "Prüfe {} Formeln für {target} ({WORKERS} parallel) …",
+        "Checking {} formulae for {target} ({WORKERS} in parallel) …",
         items.len()
     );
 
-    // Einfacher Arbeits-Pool: jeder Thread holt sich den nächsten Index.
+    // Simple worker pool: each thread takes the next index.
     let next = AtomicUsize::new(0);
     let done = AtomicUsize::new(0);
     let rows = Mutex::new(Vec::with_capacity(items.len()));
@@ -168,10 +168,10 @@ pub fn run(
 
     match report {
         Some(path) => {
-            std::fs::write(path, &text).with_context(|| format!("{path} nicht schreibbar"))?;
-            // Nur die Zusammenfassung (bis zur ersten Detail-Überschrift) ausgeben.
+            std::fs::write(path, &text).with_context(|| format!("cannot write {path}"))?;
+            // Only print the summary (up to the first detail heading).
             let summary = text.split("\n## ").next().unwrap_or(&text);
-            println!("{summary}\nVollständiger Bericht: {path}");
+            println!("{summary}\nFull report: {path}");
         }
         None => print!("{text}"),
     }
@@ -188,10 +188,10 @@ fn render(rows: &[Row], start: &str, end: &str, target: &str) -> String {
     };
 
     let mut out = String::new();
-    out += &format!("# MacPorts-Abdeckung der Top-{total} Homebrew-Formeln\n\n");
-    out += &format!("- Plattform: {target}\n");
-    out += &format!("- Homebrew-Statistik (install-on-request): {start} bis {end}\n\n");
-    out += "| Kategorie | Formeln | Anteil | gewichtet nach Installationen |\n";
+    out += &format!("# MacPorts coverage of the top {total} Homebrew formulae\n\n");
+    out += &format!("- Platform: {target}\n");
+    out += &format!("- Homebrew analytics (install-on-request): {start} to {end}\n\n");
+    out += "| Category | Formulae | Share | weighted by installs |\n";
     out += "|---|---:|---:|---:|\n";
     for cat in CATEGORIES {
         let (n, inst) = stats(cat);
@@ -202,15 +202,15 @@ fn render(rows: &[Row], start: &str, end: &str, target: &str) -> String {
         );
     }
 
-    // „Nicht prüfbar“ heißt: Port existiert, nur der Binärpaket-Check scheiterte → installierbar.
+    // "Not checkable" means: the port exists, only the binary check failed → installable.
     let (bin_n, bin_i) = stats(CATEGORIES[0]);
     let (old_n, old_i) = stats(CATEGORIES[1]);
     let (src_n, src_i) = stats(CATEGORIES[2]);
     let (unk_n, unk_i) = stats(CATEGORIES[3]);
     out += &format!(
-        "\n**In MacPorts vorhanden (installierbar):** {:.1} % der Formeln ({:.1} % gewichtet)  \n\
-         **Sicher als Binärpaket:** {:.1} % ({:.1} % gewichtet)  \n\
-         **Binärpaket inkl. Vorversion (Build-Rückstand):** {:.1} % ({:.1} % gewichtet)\n",
+        "\n**Available in MacPorts (installable):** {:.1} % of formulae ({:.1} % weighted)  \n\
+         **Certainly as a binary package:** {:.1} % ({:.1} % weighted)  \n\
+         **Binary package incl. previous version (build backlog):** {:.1} % ({:.1} % weighted)\n",
         pct(bin_n + old_n + src_n + unk_n, total),
         pct(bin_i + old_i + src_i + unk_i, total_installs),
         pct(bin_n, total),
@@ -219,7 +219,7 @@ fn render(rows: &[Row], start: &str, end: &str, target: &str) -> String {
         pct(bin_i + old_i, total_installs),
     );
 
-    // Detail-Listen für alles außer Binärpaketen – das sind die Arbeitspakete.
+    // Detail lists for everything except binary packages – those are the work items.
     for cat in &CATEGORIES[1..] {
         let list: Vec<&Row> = rows
             .iter()
@@ -229,7 +229,7 @@ fn render(rows: &[Row], start: &str, end: &str, target: &str) -> String {
             continue;
         }
         out += &format!(
-            "\n## {cat} ({})\n\n| Rang | Homebrew | MacPorts-Name | Installationen |\n|---:|---|---|---:|\n",
+            "\n## {cat} ({})\n\n| Rank | Homebrew | MacPorts name | Installs |\n|---:|---|---|---:|\n",
             list.len()
         );
         for r in list {

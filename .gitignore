@@ -3,6 +3,6 @@
 /helpers/mpkg-vm/.build
 .DS_Store
 
-# Planungsdokumente und Messberichte bleiben lokal
+# Planning documents and measurement reports stay local
 /0[0-9]-*.md
 /coverage-*.md

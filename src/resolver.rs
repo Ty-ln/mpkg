@@ -1,4 +1,4 @@
-//! Wählt für jedes Paket das passende Backend und den dortigen Namen.
+//! Picks the right backend for each package and the package's name there.
 
 use crate::backend::{Availability, Backend};
 use crate::mapping::MappingDb;
@@ -6,17 +6,17 @@ use crate::state::State;
 use anyhow::{Result, anyhow, bail};
 use std::cell::RefCell;
 
-/// Bis zu dieser macOS-Version wählt mpkg bei „nur Quellcode“ automatisch die VM.
+/// Up to this macOS version mpkg automatically picks the VM when only source is available.
 const OLD_MACOS_MAX: u32 = 12;
 
 pub struct Resolver {
     mapping: MappingDb,
     backends: Vec<Box<dyn Backend>>,
-    /// RefCell, damit lesende Methoden (&self) den Status trotzdem aktualisieren können.
+    /// RefCell so that read-only methods (&self) can still update the state.
     state: RefCell<State>,
 }
 
-/// Ergebnis der Backend-Wahl für ein Paket.
+/// Result of picking a backend for a package.
 pub struct Choice<'a> {
     pub backend: &'a dyn Backend,
     pub native: String,
@@ -41,7 +41,7 @@ impl Resolver {
             .iter()
             .find(|b| b.id() == id)
             .map(|b| &**b as &dyn Backend)
-            .ok_or_else(|| anyhow!("unbekanntes Backend `{id}`"))
+            .ok_or_else(|| anyhow!("unknown backend `{id}`"))
     }
 
     fn ready_backends(&self) -> Vec<&dyn Backend> {
@@ -52,18 +52,18 @@ impl Resolver {
             .collect()
     }
 
-    /// Bricht mit einer klaren Meldung ab, wenn kein Backend eingerichtet ist.
+    /// Aborts with a clear message if no backend is set up.
     pub fn ensure_any_ready(&self) -> Result<()> {
         if self.ready_backends().is_empty() {
             bail!(
-                "Kein Backend eingerichtet (Homebrew auf Apple Silicon, sonst MacPorts).\n\
-                 Führe `mpkg setup` aus, um es automatisch einzurichten."
+                "No backend set up (Homebrew on Apple Silicon, otherwise MacPorts).\n\
+                 Run `mpkg setup` to set it up automatically."
             );
         }
         Ok(())
     }
 
-    /// Reihenfolge: erzwungenes Backend → Binärpaket → nicht prüfbar → nur Quellcode.
+    /// Order: forced backend → binary package → not checkable → source only.
     pub fn choose(&self, name: &str, forced: Option<&str>) -> Result<Choice<'_>> {
         if let Some(id) = forced {
             let backend = self.backend_by_id(id)?;
@@ -89,8 +89,8 @@ impl Resolver {
             Availability::NotFound => 4,
         };
 
-        // Auf alten Systemen dauern Quellcode-Builds lange und scheitern öfter (siehe 06):
-        // dort ist das fertige Debian-Paket aus der VM die bessere Wahl.
+        // On old systems source builds take long and fail more often:
+        // there the prebuilt Debian package from the VM is the better choice.
         let prefer_vm_over_source = crate::setup::macos_major().is_ok_and(|m| m <= OLD_MACOS_MAX);
 
         let mut best: Option<Choice> = None;
@@ -98,8 +98,8 @@ impl Resolver {
             if backend.on_request_only() {
                 continue;
             }
-            // Die VM nur fragen (und dafür ggf. starten), wenn nativ kein Binärpaket da ist:
-            // gar nichts gefunden, oder nur Quellcode auf einem alten System.
+            // Only ask the VM (and possibly boot it for that) if there is no native binary:
+            // nothing found at all, or only source on an old system.
             let native_needs_build = best.as_ref().is_some_and(|b| {
                 matches!(
                     b.availability,
@@ -137,26 +137,26 @@ impl Resolver {
             let cask = self.ready_backends().into_iter().find(|b| b.on_request_only());
             match cask {
                 Some(c) if c.availability(name).is_ok_and(|a| a == Availability::Binary) => anyhow!(
-                    "Paket `{name}` wurde in keinem Backend gefunden – es gibt aber die App `{name}`:\n  mpkg install --cask {name}"
+                    "Package `{name}` was not found in any backend – but there is an app `{name}`:\n  mpkg install --cask {name}"
                 ),
-                _ => anyhow!("Paket `{name}` wurde in keinem Backend gefunden"),
+                _ => anyhow!("Package `{name}` was not found in any backend"),
             }
         })
     }
 
     pub fn install(&self, names: &[String], forced: Option<&str>, dry_run: bool) -> Result<()> {
         for name in names {
-            // Bekannter Name: nicht erneut installieren und vor allem keinen Eintrag eines
-            // anderen Backends überschreiben (z. B. gleichnamige Formel und App aus Drittquellen).
+            // Known name: do not install again, and above all never overwrite an entry of
+            // another backend (e.g. a formula and an app with the same name from third-party taps).
             if let Some(i) = self.state.borrow().get(name) {
                 match forced {
                     Some(id) if id != i.backend => bail!(
-                        "`{name}` ist schon über {} installiert. Erst `mpkg remove {name}`, dann erneut installieren.",
+                        "`{name}` is already installed via {}. Run `mpkg remove {name}` first, then install again.",
                         i.backend
                     ),
                     _ => {
                         println!(
-                            "{name} ist bereits installiert ({} über {})",
+                            "{name} is already installed ({} via {})",
                             i.native, i.backend
                         );
                         continue;
@@ -165,7 +165,7 @@ impl Resolver {
             }
             let c = self.choose(name, forced)?;
             println!(
-                "{name} → {} (über {}){}",
+                "{name} → {} (via {}){}",
                 c.native,
                 c.backend.id(),
                 note(c.availability)
@@ -178,7 +178,7 @@ impl Resolver {
                 )
             {
                 println!(
-                    "  Tipp: `mpkg install --backend linuxvm {name}` nimmt das fertige Debian-Paket aus der VM."
+                    "  Tip: `mpkg install --backend linuxvm {name}` uses the prebuilt Debian package from the VM."
                 );
             }
             c.backend.install(&c.native, dry_run)?;
@@ -191,8 +191,8 @@ impl Resolver {
         Ok(())
     }
 
-    /// Bereits vorhandenes Paket in den Status übernehmen, ohne es neu zu installieren.
-    /// Gibt false zurück, wenn mpkg den Namen schon kennt (auch von einem anderen Backend).
+    /// Records an already installed package in the state without reinstalling it.
+    /// Returns false if mpkg already knows the name (also from another backend).
     pub fn adopt(&self, name: &str, backend: &str, native: &str, dry_run: bool) -> Result<bool> {
         let mut state = self.state.borrow_mut();
         if state.get(name).is_some() {
@@ -208,7 +208,7 @@ impl Resolver {
 
     pub fn remove(&self, names: &[String], dry_run: bool) -> Result<()> {
         for name in names {
-            // Bekanntes Paket: genau dort entfernen, wo es installiert wurde.
+            // Known package: remove it exactly where it was installed.
             let known = self.state.borrow().get(name).cloned();
             let (backend, native) = match known {
                 Some(i) => (self.backend_by_id(&i.backend)?, i.native),
@@ -217,7 +217,7 @@ impl Resolver {
                     (c.backend, c.native)
                 }
             };
-            println!("{name} → entferne {native} (über {})", backend.id());
+            println!("{name} → removing {native} (via {})", backend.id());
             backend.remove(&native, dry_run)?;
             if !dry_run {
                 let mut state = self.state.borrow_mut();
@@ -240,14 +240,14 @@ impl Resolver {
 
     pub fn show(&self, name: &str) -> Result<()> {
         self.ensure_any_ready()?;
-        println!("Paket: {name}");
+        println!("Package: {name}");
         if let Some(entry) = self.mapping.entry(name) {
             println!("  Mapping: {entry:?}");
         }
         for backend in self.ready_backends() {
             let native = self.mapping.name_for(name, backend.id());
             println!(
-                "  {:<10} {native:<20} {:?}",
+                "  {:<14} {native:<20} {:?}",
                 backend.id(),
                 backend.availability(&native)?
             );
@@ -259,7 +259,7 @@ impl Resolver {
         {
             let state = self.state.borrow();
             if state.packages.is_empty() {
-                println!("Noch keine Pakete über mpkg installiert.");
+                println!("No packages installed via mpkg yet.");
             }
             for (name, i) in &state.packages {
                 println!("{name:<25} {:<20} [{}]", i.native, i.backend);
@@ -267,7 +267,7 @@ impl Resolver {
         }
         if all {
             for backend in self.ready_backends() {
-                println!("\n[{} – alle angeforderten Pakete]", backend.id());
+                println!("\n[{} – all requested packages]", backend.id());
                 backend.list()?;
             }
         }
@@ -291,39 +291,39 @@ impl Resolver {
     pub fn print_backends(&self) {
         for backend in &self.backends {
             let state = if backend.is_ready() {
-                "bereit"
+                "ready"
             } else {
-                "nicht eingerichtet"
+                "not set up"
             };
             println!("{:<14} {state}", backend.id());
         }
     }
 }
 
-/// Warum ein erzwungenes Backend nicht nutzbar ist.
+/// Why a forced backend cannot be used.
 fn not_ready_hint(id: &str) -> String {
     match id {
         "homebrew-cask" | "homebrew" => {
             if std::env::consts::ARCH == "aarch64" {
-                "Homebrew ist nicht installiert – `mpkg setup` richtet es ein.".to_owned()
+                "Homebrew is not installed – `mpkg setup` sets it up.".to_owned()
             } else {
-                "Homebrew (und damit Apps/Casks) nutzt mpkg nur auf Apple Silicon. Auf Intel baut Homebrew keine Pakete mehr.".to_owned()
+                "mpkg uses Homebrew (and therefore apps/casks) only on Apple Silicon. Homebrew no longer builds packages for Intel.".to_owned()
             }
         }
-        "linuxvm" => "Die VM ist noch nicht angelegt – `mpkg vm create`.".to_owned(),
-        _ => format!("Backend `{id}` ist nicht eingerichtet – `mpkg setup` oder `mpkg doctor`."),
+        "linuxvm" => "The VM has not been created yet – run `mpkg vm create`.".to_owned(),
+        _ => format!("Backend `{id}` is not set up – run `mpkg setup` or `mpkg doctor`."),
     }
 }
 
-/// Zusatzhinweis zur Verfügbarkeit für die Ausgabe.
+/// Availability hint for the output.
 pub fn note(a: Availability) -> &'static str {
     match a {
         Availability::Binary => "",
-        Availability::Unknown => "  [Binärpaket nicht prüfbar]",
+        Availability::Unknown => "  [binary package could not be checked]",
         Availability::OlderBinary => {
-            "  [⏳ Binärpaket nur für die Vorversion – jetzt Build aus Quellcode, oder später erneut versuchen]"
+            "  [⏳ binary package only for the previous version – building from source now, or try again later]"
         }
-        Availability::SourceOnly => "  [⚠ kein Binärpaket – wird aus dem Quellcode gebaut]",
-        Availability::NotFound => "  [nicht gefunden]",
+        Availability::SourceOnly => "  [⚠ no binary package – will be built from source]",
+        Availability::NotFound => "  [not found]",
     }
 }

@@ -3,13 +3,13 @@ use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
 
-/// Standard-Präfix – nur dort passen die offiziellen Binärarchive.
+/// Default prefix – the official binary archives only work there.
 const PORT: &str = "/opt/local/bin/port";
-/// Server mit den vorgebauten Archiven (ein Verzeichnis pro Port).
+/// Server with the prebuilt archives (one directory per port).
 const ARCHIVE_BASE: &str = "https://packages.macports.org";
 
 pub struct MacPorts {
-    /// Für `mpkg coverage`: andere Plattform prüfen, z. B. ".darwin_20.x86_64".
+    /// For `mpkg coverage`: check another platform, e.g. ".darwin_20.x86_64".
     platform_override: Option<String>,
 }
 
@@ -20,7 +20,7 @@ impl MacPorts {
         }
     }
 
-    /// Prüft Binärpakete für eine fremde Plattform statt für dieses System.
+    /// Checks binary packages for another platform instead of this system.
     pub fn with_platform(platform: &str) -> Self {
         Self {
             platform_override: Some(platform.to_owned()),
@@ -28,7 +28,7 @@ impl MacPorts {
     }
 }
 
-/// Plattform-Kennung im Archivnamen, z. B. ".darwin_25.arm64" oder ".darwin_20.x86_64".
+/// Platform tag in the archive name, e.g. ".darwin_25.arm64" or ".darwin_20.x86_64".
 fn platform_tag() -> Option<String> {
     let uname = |flag: &str| {
         Command::new("uname")
@@ -42,8 +42,8 @@ fn platform_tag() -> Option<String> {
     Some(format!(".darwin_{darwin_major}.{arch}"))
 }
 
-/// Architekturunabhängige Archive, z. B. "….any_any.noarch" (Skripte),
-/// "….darwin_any.noarch" oder "….darwin_25.noarch".
+/// Architecture-independent archives, e.g. "….any_any.noarch" (scripts),
+/// "….darwin_any.noarch" or "….darwin_25.noarch".
 fn is_noarch(file: &str, platform: &str) -> bool {
     // platform = ".darwin_25.arm64" → os = ".darwin_25"
     let os = platform.rsplit_once('.').map_or(platform, |(os, _)| os);
@@ -52,9 +52,9 @@ fn is_noarch(file: &str, platform: &str) -> bool {
         || file.contains(&format!("{os}.noarch"))
 }
 
-/// Standardvarianten aus der `port variants`-Ausgabe, im Archivnamen-Format.
-/// `[+]` markiert Standardvarianten; `(+)` stammt aus der lokalen variants.conf und
-/// zählt nicht, weil die offiziellen Archive nur mit Standardvarianten gebaut werden.
+/// Default variants from the `port variants` output, in archive-name format.
+/// `[+]` marks default variants; `(+)` comes from the local variants.conf and does not
+/// count, because the official archives are only built with default variants.
 ///   "[+]huge: Build huge vim\n   x11: …" → "+huge"
 fn default_variants(output: &str) -> String {
     let mut variants: Vec<&str> = output
@@ -69,20 +69,18 @@ fn default_variants(output: &str) -> String {
     variants.iter().map(|v| format!("+{v}")).collect()
 }
 
-/// HTTP-Anfrage über curl; liefert (Statuscode, Body) oder None bei Netzwerkproblemen.
+/// HTTP request via curl; returns (status code, body) or None on network problems.
 ///
-/// Bewusst ohne `curl -f`: Dessen Exit-Code bei HTTP-Fehlern ist nicht einheitlich
-/// (22, bei HTTP/2 teils 56). Der Statuscode über `-w` ist eindeutig.
+/// Deliberately without `curl -f`: its exit code on HTTP errors is not consistent
+/// (22, sometimes 56 with HTTP/2). The status code via `-w` is unambiguous.
 fn http_request(url: &str, head: bool, timeout_secs: u32) -> Option<(u16, String)> {
-    // Bis zu 3 Versuche bei Netzwerkfehlern, 429 (Rate-Limit) und 5xx – mit kurzer Pause.
+    // Up to 3 attempts on network errors, 429 (rate limit) and 5xx – with a short pause.
     for attempt in 1..=3u64 {
         match http_request_once(url, head, timeout_secs) {
             Some((code, body)) if code != 429 && code < 500 => return Some((code, body)),
             result if attempt == 3 => return result,
             _ => {
-                debug(format!(
-                    "{url} → Versuch {attempt} fehlgeschlagen, wiederhole …"
-                ));
+                debug(format!("{url} → attempt {attempt} failed, retrying …"));
                 std::thread::sleep(std::time::Duration::from_secs(attempt));
             }
         }
@@ -108,9 +106,9 @@ fn http_request_once(url: &str, head: bool, timeout_secs: u32) -> Option<(u16, S
     let (body, code) = text.rsplit_once('\n').unwrap_or(("", text.as_ref()));
     let code: u16 = code.trim().parse().unwrap_or(0);
     if code == 0 {
-        // 000 = keine HTTP-Antwort (Timeout, DNS, TLS …)
+        // 000 = no HTTP response (timeout, DNS, TLS …)
         debug(format!(
-            "{url} → keine Antwort: {}",
+            "{url} → no response: {}",
             String::from_utf8_lossy(&out.stderr).trim()
         ));
         return None;
@@ -118,7 +116,7 @@ fn http_request_once(url: &str, head: bool, timeout_secs: u32) -> Option<(u16, S
     Some((code, body.to_owned()))
 }
 
-/// HEAD-Request: Some(true) = existiert, Some(false) = 4xx, None = Netzwerk-/Serverproblem.
+/// HEAD request: Some(true) = exists, Some(false) = 4xx, None = network/server problem.
 fn url_exists(url: &str) -> Option<bool> {
     match http_request(url, true, 10)? {
         (200..=299, _) => Some(true),
@@ -130,8 +128,8 @@ fn url_exists(url: &str) -> Option<bool> {
     }
 }
 
-/// Schneller Weg: exakten Archivnamen bauen und gezielt per HEAD abfragen.
-/// Liefert nur bei einem Treffer ein Ergebnis – sonst entscheidet die Verzeichnisliste.
+/// Fast path: build the exact archive name and query it with HEAD.
+/// Only returns a result on a hit – otherwise the directory listing decides.
 fn exact_archive_status(
     name: &str,
     version: &str,
@@ -150,20 +148,20 @@ fn exact_archive_status(
     for suffix in &suffixes {
         let url = format!("{base}{suffix}.tbz2");
         if url_exists(&url) == Some(true) {
-            debug(format!("{name}: Treffer per HEAD: {url}"));
+            debug(format!("{name}: HEAD hit: {url}"));
             return Some(Availability::Binary);
         }
     }
     debug(format!(
-        "{name}: kein HEAD-Treffer für {base}… – Fallback auf Verzeichnisliste"
+        "{name}: no HEAD hit for {base}… – falling back to the directory listing"
     ));
     None
 }
 
-/// Prüft auf packages.macports.org, ob es für die aktuelle Version ein Archiv
-/// für diese Plattform (oder ein architekturunabhängiges) gibt.
+/// Checks packages.macports.org for an archive of the current version for this
+/// platform (or an architecture-independent one).
 ///
-/// Archivnamen: <name>-<version>_<revision>[+varianten].darwin_<N>.<arch>.tbz2
+/// Archive names: <name>-<version>_<revision>[+variants].darwin_<N>.<arch>.tbz2
 fn binary_archive_status(
     name: &str,
     version: &str,
@@ -173,7 +171,7 @@ fn binary_archive_status(
 ) -> Availability {
     let Some(platform) = platform_override.map(str::to_owned).or_else(platform_tag) else {
         debug(format!(
-            "{name}: Plattform-Kennung (uname) nicht ermittelbar"
+            "{name}: could not determine the platform tag (uname)"
         ));
         return Availability::Unknown;
     };
@@ -185,10 +183,10 @@ fn binary_archive_status(
     let url = format!("{ARCHIVE_BASE}/{name}/");
     let listing = match http_request(&url, false, 30) {
         Some((200..=299, body)) => body,
-        // Kein Verzeichnis = MacPorts hat für diesen Port nie ein Archiv veröffentlicht
-        // (z. B. weil die Lizenz das Verteilen von Binärpaketen nicht erlaubt).
+        // No directory = MacPorts never published an archive for this port
+        // (e.g. because its license does not allow distributing binaries).
         Some((404, _)) => {
-            debug(format!("{name}: {url} → HTTP 404 (kein Archivverzeichnis)"));
+            debug(format!("{name}: {url} → HTTP 404 (no archive directory)"));
             return Availability::SourceOnly;
         }
         Some((code, _)) => {
@@ -201,7 +199,7 @@ fn binary_archive_status(
     let prefix = format!("{name}-{version}_{revision}");
     let found = listing.match_indices(&prefix).any(|(i, _)| {
         let rest = &listing[i + prefix.len()..];
-        // Direkt danach muss eine Variante (+…) oder die Plattform (.darwin…) folgen.
+        // Must be followed directly by a variant (+…) or the platform (.darwin…).
         if !(rest.starts_with('+') || rest.starts_with('.')) {
             return false;
         }
@@ -210,15 +208,15 @@ fn binary_archive_status(
     });
 
     debug(format!(
-        "{name}: suche `{prefix}` mit `{platform}` in {} Bytes → {}",
+        "{name}: looking for `{prefix}` with `{platform}` in {} bytes → {}",
         listing.len(),
-        if found { "gefunden" } else { "nicht gefunden" }
+        if found { "found" } else { "not found" }
     ));
     if found {
         return Availability::Binary;
     }
 
-    // Gibt es für diese Plattform wenigstens eine ältere Version? Dann hinkt der Build hinterher.
+    // Is there at least an older version for this platform? Then the build is lagging behind.
     let any_version = format!("{name}-");
     let older = listing.match_indices(&any_version).any(|(i, _)| {
         let rest = &listing[i..];
@@ -226,7 +224,7 @@ fn binary_archive_status(
         file.contains(&platform) || is_noarch(file, &platform)
     });
     debug(format!(
-        "{name}: ältere Version für `{platform}` vorhanden: {older}"
+        "{name}: older version for `{platform}` available: {older}"
     ));
     if older {
         Availability::OlderBinary
@@ -245,19 +243,22 @@ impl Backend for MacPorts {
     }
 
     fn availability(&self, name: &str) -> Result<Availability> {
-        // Liefert "version<TAB>revision"; schlägt fehl, wenn es den Port nicht gibt.
+        // Returns "version<TAB>revision"; fails if the port does not exist.
         let out = Command::new(PORT)
             .args(["-q", "info", "--line", "--version", "--revision", name])
             .output()
-            .context("`port info` fehlgeschlagen")?;
+            .context("`port info` failed")?;
         let info = String::from_utf8_lossy(&out.stdout);
         if !out.status.success() || info.trim().is_empty() {
             return Ok(Availability::NotFound);
         }
-        // Version und Revision enthalten keine Leerzeichen; der Rest sind die Varianten.
+        // Version and revision contain no spaces; the rest are the variants.
         let mut fields = info.trim().splitn(3, char::is_whitespace);
         let (Some(version), Some(revision)) = (fields.next(), fields.next()) else {
-            debug(format!("{name}: `port info` unerwartet: {:?}", info.trim()));
+            debug(format!(
+                "{name}: unexpected `port info` output: {:?}",
+                info.trim()
+            ));
             return Ok(Availability::Unknown);
         };
         let variants_out = Command::new(PORT)
@@ -267,7 +268,7 @@ impl Backend for MacPorts {
             .unwrap_or_default();
         let variants = default_variants(&variants_out);
         debug(format!(
-            "{name}: version={version} revision={revision} standardvarianten={variants:?}"
+            "{name}: version={version} revision={revision} default_variants={variants:?}"
         ));
         Ok(binary_archive_status(
             name,
@@ -279,7 +280,7 @@ impl Backend for MacPorts {
     }
 
     fn install(&self, name: &str, dry_run: bool) -> Result<()> {
-        // -N: nicht interaktiv. sudo, weil /opt/local root gehört.
+        // -N: non-interactive. sudo, because /opt/local belongs to root.
         run("sudo", &[PORT, "-N", "install", name], dry_run)
     }
 
@@ -291,7 +292,7 @@ impl Backend for MacPorts {
         let out = Command::new(PORT)
             .args(["-q", "search", "--name", "--line", query])
             .output()
-            .context("`port search` fehlgeschlagen")?;
+            .context("`port search` failed")?;
         Ok(String::from_utf8_lossy(&out.stdout)
             .lines()
             .filter_map(|line| line.split_whitespace().next())
@@ -308,13 +309,13 @@ impl Backend for MacPorts {
     }
 
     fn upgrade(&self, dry_run: bool) -> Result<()> {
-        // Erst nachsehen, ob etwas veraltet ist: `port upgrade outdated` behandelt
-        // „nichts zu tun“ je nach Version als Fehler.
-        // Ausgabe von `port -q outdated`: "name   1.0_0 < 1.1_0" pro Zeile.
+        // Check first whether anything is outdated: depending on the version,
+        // `port upgrade outdated` treats "nothing to do" as an error.
+        // Output of `port -q outdated`: "name   1.0_0 < 1.1_0" per line.
         let out = Command::new(PORT)
             .args(["-q", "outdated"])
             .output()
-            .context("`port outdated` fehlgeschlagen")?;
+            .context("`port outdated` failed")?;
         let outdated: Vec<String> = String::from_utf8_lossy(&out.stdout)
             .lines()
             .filter_map(|line| line.split_whitespace().next())
@@ -322,11 +323,11 @@ impl Backend for MacPorts {
             .collect();
 
         if outdated.is_empty() {
-            println!("✓ Alle MacPorts-Pakete sind aktuell.");
+            println!("✓ All MacPorts packages are up to date.");
             return Ok(());
         }
         println!(
-            "{} veraltete Pakete: {}",
+            "{} outdated packages: {}",
             outdated.len(),
             outdated.join(", ")
         );

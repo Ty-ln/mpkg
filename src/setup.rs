@@ -1,15 +1,15 @@
-//! `mpkg setup`: richtet das Haupt-Backend automatisch ein.
+//! `mpkg setup`: sets up the main backend automatically.
 //!
-//! Apple Silicon: Homebrew über den offiziellen, signierten `Homebrew.pkg`
-//! (Gatekeeper-geprüft, kein `curl | bash`) und `brew shellenv` in der Shell-Konfiguration.
+//! Apple Silicon: Homebrew via the official, signed `Homebrew.pkg`
+//! (Gatekeeper-checked, no `curl | bash`) and `brew shellenv` in the shell profile.
 //!
-//! Intel – Ablauf für MacPorts:
-//!   1. Xcode Command Line Tools prüfen (sonst den Apple-Dialog öffnen)
-//!   2. Neuesten MacPorts-Release über die GitHub-API ermitteln
-//!   3. Passenden Installer für die macOS-Hauptversion wählen
-//!      (Schema: MacPorts-<version>-<major>-<Name>.pkg)
-//!   4. Laden, Gatekeeper/Notarisierung prüfen, mit `installer` installieren
-//!   5. PATH in der Shell-Konfiguration eintragen (nach Rückfrage)
+//! Intel – steps for MacPorts:
+//!   1. Check the Xcode Command Line Tools (otherwise open Apple's dialog)
+//!   2. Find the latest MacPorts release via the GitHub API
+//!   3. Pick the installer for the macOS major version
+//!      (scheme: MacPorts-<version>-<major>-<Name>.pkg)
+//!   4. Download, check Gatekeeper/notarisation, install with `installer`
+//!   5. Add PATH to the shell profile (after asking)
 //!   6. `port selfupdate`
 
 use crate::backend::run;
@@ -41,18 +41,18 @@ pub fn run_setup(dry_run: bool) -> Result<()> {
     if std::env::consts::ARCH == "aarch64" {
         return setup_homebrew(dry_run);
     }
-    // Nach einem macOS-Upgrade passt die vorhandene MacPorts-Installation nicht mehr:
-    // dann den Installer für die neue Version darüber installieren.
+    // After a macOS upgrade the existing MacPorts install no longer fits:
+    // then install the installer for the new version over it.
     let mut os_upgrade = false;
     if Path::new(PORT).exists() {
         match crate::doctor::macports_platform_mismatch() {
             Some(Some(msg)) => {
-                println!("! MacPorts passt nicht mehr zur macOS-Version ({msg}).");
-                println!("  Installiere die passende MacPorts-Version …");
+                println!("! MacPorts no longer matches the macOS version ({msg}).");
+                println!("  Installing the matching MacPorts version …");
                 os_upgrade = true;
             }
             _ => {
-                println!("✓ MacPorts ist bereits installiert.");
+                println!("✓ MacPorts is already installed.");
                 return ensure_path(dry_run);
             }
         }
@@ -62,21 +62,21 @@ pub fn run_setup(dry_run: bool) -> Result<()> {
 
     let major = macos_major()?;
     if major < 11 {
-        bail!("macOS {major} wird nicht unterstützt (mindestens macOS 11 Big Sur).");
+        bail!("macOS {major} is not supported (macOS 11 Big Sur or later required).");
     }
 
     let (version, asset) = find_installer(major)?;
-    println!("MacPorts {version} für macOS {major}: {}", asset.name);
+    println!("MacPorts {version} for macOS {major}: {}", asset.name);
 
     if dry_run {
         if os_upgrade {
             println!(
-                "→ danach müssten die installierten Pakete neu gebaut werden: mpkg migrate-macports"
+                "→ afterwards the installed packages would need a rebuild: mpkg migrate-macports"
             );
         }
-        println!("→ würde laden: {}", asset.browser_download_url);
+        println!("→ would download: {}", asset.browser_download_url);
         println!(
-            "→ würde installieren: sudo installer -pkg {} -target /",
+            "→ would install: sudo installer -pkg {} -target /",
             asset.name
         );
         return ensure_path(true);
@@ -87,17 +87,15 @@ pub fn run_setup(dry_run: bool) -> Result<()> {
     ensure_path(false)?;
     run("sudo", &[PORT, "selfupdate"], false)?;
 
-    println!(
-        "\n✓ MacPorts ist eingerichtet. Öffne ein neues Terminal oder lade deine Shell-Konfiguration neu."
-    );
+    println!("\n✓ MacPorts is set up. Open a new terminal or reload your shell profile.");
     if os_upgrade {
-        println!("\n! Die bisher installierten Pakete wurden für die alte macOS-Version gebaut");
-        println!("  und müssen neu installiert werden: mpkg migrate-macports");
+        println!("\n! The packages installed so far were built for the old macOS version");
+        println!("  and need to be reinstalled: mpkg migrate-macports");
     }
     Ok(())
 }
 
-/// Command Line Tools vorhanden? Sonst Apple-Installationsdialog öffnen.
+/// Command Line Tools present? Otherwise open Apple's install dialog.
 pub(crate) fn ensure_clt(dry_run: bool) -> Result<()> {
     let ok = Command::new("xcode-select")
         .arg("-p")
@@ -105,18 +103,18 @@ pub(crate) fn ensure_clt(dry_run: bool) -> Result<()> {
         .map(|o| o.status.success())
         .unwrap_or(false);
     if ok {
-        println!("✓ Xcode Command Line Tools vorhanden");
+        println!("✓ Xcode Command Line Tools present");
         return Ok(());
     }
     if dry_run {
-        println!("→ würde `xcode-select --install` starten");
+        println!("→ would start `xcode-select --install`");
         return Ok(());
     }
-    // Öffnet einen grafischen Dialog; die Installation läuft asynchron.
+    // Opens a graphical dialog; the installation runs asynchronously.
     run("xcode-select", &["--install"], false)?;
     bail!(
-        "Die Command Line Tools werden installiert. Bitte den Dialog abschließen \
-         und danach `mpkg setup` erneut ausführen."
+        "The Command Line Tools are being installed. Please finish the dialog \
+         and then run `mpkg setup` again."
     )
 }
 
@@ -124,33 +122,33 @@ pub(crate) fn macos_major() -> Result<u32> {
     let out = Command::new("sw_vers")
         .arg("-productVersion")
         .output()
-        .context("`sw_vers` fehlgeschlagen")?;
+        .context("`sw_vers` failed")?;
     let version = String::from_utf8_lossy(&out.stdout);
     version
         .trim()
         .split('.')
         .next()
         .and_then(|m| m.parse().ok())
-        .with_context(|| format!("unbekannte macOS-Version `{}`", version.trim()))
+        .with_context(|| format!("unknown macOS version `{}`", version.trim()))
 }
 
-/// Neuesten Release eines GitHub-Repos über die API abfragen.
+/// Fetch the latest release of a GitHub repo via the API.
 fn latest_release(api: &str) -> Result<Release> {
     let out = Command::new("curl")
         .args(["-fsSL", "-H", "Accept: application/vnd.github+json", api])
         .output()
-        .context("`curl` fehlgeschlagen")?;
+        .context("`curl` failed")?;
     if !out.status.success() {
-        bail!("Releases konnten nicht abgefragt werden (GitHub-API: {api}).");
+        bail!("Could not fetch releases (GitHub API: {api}).");
     }
-    serde_json::from_slice(&out.stdout).context("Antwort der GitHub-API nicht lesbar")
+    serde_json::from_slice(&out.stdout).context("could not read the GitHub API response")
 }
 
-/// Signiertes .pkg laden, mit Gatekeeper prüfen und installieren.
+/// Download a signed .pkg, check it with Gatekeeper and install it.
 fn install_pkg(asset: &Asset) -> Result<()> {
     let pkg = std::env::temp_dir().join(&asset.name);
-    let pkg_str = pkg.to_str().context("ungültiger Temp-Pfad")?;
-    // --retry: Installer sind 30+ MB, Abbrüche bei schwachem WLAN sind häufig.
+    let pkg_str = pkg.to_str().context("invalid temp path")?;
+    // --retry: installers are 30+ MB, drops on weak Wi-Fi are common.
     run(
         "curl",
         &[
@@ -174,18 +172,18 @@ fn install_pkg(asset: &Asset) -> Result<()> {
     Ok(())
 }
 
-/// Apple Silicon: Homebrew einrichten (oder vorhandenes nutzen).
+/// Apple Silicon: set up Homebrew (or use the existing one).
 fn setup_homebrew(dry_run: bool) -> Result<()> {
     let brew = crate::backend::homebrew::BREW;
     if Path::new(brew).exists() {
-        println!("✓ Homebrew ist bereits installiert.");
-        // Schon im PATH (z. B. über ~/.zshrc)? Dann keine zweite Zeile eintragen.
+        println!("✓ Homebrew is already installed.");
+        // Already in PATH (e.g. via ~/.zshrc)? Then do not add a second line.
         if std::env::var("PATH")
             .unwrap_or_default()
             .split(':')
             .any(|p| p == "/opt/homebrew/bin")
         {
-            println!("✓ /opt/homebrew/bin ist im PATH");
+            println!("✓ /opt/homebrew/bin is in PATH");
             return Ok(());
         }
         return ensure_profile_line(
@@ -201,12 +199,12 @@ fn setup_homebrew(dry_run: bool) -> Result<()> {
         .assets
         .into_iter()
         .find(|a| a.name == "Homebrew.pkg")
-        .context("Kein Homebrew.pkg im neuesten Homebrew-Release gefunden")?;
+        .context("no Homebrew.pkg found in the latest Homebrew release")?;
     println!("Homebrew {}: {}", release.tag_name, asset.name);
     if dry_run {
-        println!("→ würde laden: {}", asset.browser_download_url);
+        println!("→ would download: {}", asset.browser_download_url);
         println!(
-            "→ würde installieren: sudo installer -pkg {} -target /",
+            "→ would install: sudo installer -pkg {} -target /",
             asset.name
         );
         return ensure_profile_line(
@@ -223,31 +221,29 @@ fn setup_homebrew(dry_run: bool) -> Result<()> {
         "Homebrew",
         false,
     )?;
-    println!(
-        "\n✓ Homebrew ist eingerichtet. Öffne ein neues Terminal oder lade deine Shell-Konfiguration neu."
-    );
+    println!("\n✓ Homebrew is set up. Open a new terminal or reload your shell profile.");
     Ok(())
 }
 
-/// Neuesten Release abfragen und den Installer für `major` heraussuchen.
+/// Fetch the latest release and pick the installer for `major`.
 fn find_installer(major: u32) -> Result<(String, Asset)> {
     let release = latest_release(RELEASES_API)?;
 
-    // "-26-" passt auf "MacPorts-2.12.7-26-Tahoe.pkg", aber nicht auf "-10.11-".
+    // "-26-" matches "MacPorts-2.12.7-26-Tahoe.pkg" but not "-10.11-".
     let marker = format!("-{major}-");
     let asset = release
         .assets
         .into_iter()
         .find(|a| a.name.starts_with("MacPorts-") && a.name.ends_with(".pkg") && a.name.contains(&marker))
         .with_context(|| {
-            format!("Kein MacPorts-Installer für macOS {major} im neuesten Release gefunden – siehe macports.org/install.php")
+            format!("no MacPorts installer for macOS {major} in the latest release – see macports.org/install.php")
         })?;
 
     let version = release.tag_name.trim_start_matches('v').to_owned();
     Ok((version, asset))
 }
 
-/// Gatekeeper-Prüfung: Paket muss mit Developer ID signiert und von Apple akzeptiert sein.
+/// Gatekeeper check: the package must be signed with a Developer ID and accepted by Apple.
 fn verify_package(pkg: &Path) -> Result<()> {
     let ok = Command::new("spctl")
         .args(["--assess", "--type", "install"])
@@ -257,17 +253,17 @@ fn verify_package(pkg: &Path) -> Result<()> {
         .unwrap_or(false);
     if !ok {
         bail!(
-            "Gatekeeper hat {} abgelehnt – Installation abgebrochen.",
+            "Gatekeeper rejected {} – installation aborted.",
             pkg.display()
         );
     }
-    println!("✓ Signatur und Notarisierung geprüft");
+    println!("✓ Signature and notarisation verified");
     Ok(())
 }
 
-/// Shell-Konfigurationsdatei passend zur Login-Shell.
+/// Shell profile file for the login shell.
 pub(crate) fn shell_profile() -> Result<PathBuf> {
-    let home = std::env::var_os("HOME").context("HOME nicht gesetzt")?;
+    let home = std::env::var_os("HOME").context("HOME is not set")?;
     let shell = std::env::var("SHELL").unwrap_or_default();
     let file = if shell.ends_with("bash") {
         ".bash_profile"
@@ -277,33 +273,33 @@ pub(crate) fn shell_profile() -> Result<PathBuf> {
     Ok(PathBuf::from(home).join(file))
 }
 
-/// /opt/local/bin in die Shell-Konfiguration eintragen (nach Rückfrage).
+/// Add /opt/local/bin to the shell profile (after asking).
 fn ensure_path(dry_run: bool) -> Result<()> {
     ensure_profile_line("/opt/local/bin", PATH_LINE, "MacPorts", dry_run)
 }
 
-/// `line` in die Shell-Konfiguration eintragen (nach Rückfrage), außer `marker` steht schon drin.
+/// Add `line` to the shell profile (after asking), unless `marker` is already in it.
 fn ensure_profile_line(marker: &str, line: &str, name: &str, dry_run: bool) -> Result<()> {
     let profile = shell_profile()?;
     let content = std::fs::read_to_string(&profile).unwrap_or_default();
     if content.contains(marker) {
-        println!("✓ PATH-Eintrag in {} vorhanden", profile.display());
+        println!("✓ PATH entry already in {}", profile.display());
         return Ok(());
     }
     if dry_run {
-        println!("→ würde in {} eintragen: {line}", profile.display());
+        println!("→ would add to {}: {line}", profile.display());
         return Ok(());
     }
 
     print!(
-        "PATH-Eintrag für {name} in {} ergänzen? [J/n] ",
+        "Add the PATH entry for {name} to {}? [Y/n] ",
         profile.display()
     );
     io::stdout().flush()?;
     let mut answer = String::new();
     io::stdin().read_line(&mut answer)?;
     if matches!(answer.trim(), "n" | "N") {
-        println!("Übersprungen. Manuell eintragen: {line}");
+        println!("Skipped. Add it manually: {line}");
         return Ok(());
     }
 
@@ -311,8 +307,8 @@ fn ensure_profile_line(marker: &str, line: &str, name: &str, dry_run: bool) -> R
         .create(true)
         .append(true)
         .open(&profile)
-        .with_context(|| format!("{} nicht beschreibbar", profile.display()))?;
-    writeln!(file, "\n# {name} (eingetragen von mpkg)\n{line}")?;
-    println!("✓ PATH-Eintrag ergänzt");
+        .with_context(|| format!("cannot write {}", profile.display()))?;
+    writeln!(file, "\n# {name} (added by mpkg)\n{line}")?;
+    println!("✓ PATH entry added");
     Ok(())
 }

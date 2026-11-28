@@ -1,27 +1,27 @@
-// mpkg-vm – kleiner Helfer, der die Debian-VM über Virtualization.framework betreibt.
-// Wird vom Rust-Kern (src/backend/linuxvm.rs) im Hintergrund gestartet; Download,
-// Provisionierung (cloud-init), Status und `exec` (per ssh) erledigt der Rust-Kern.
+// mpkg-vm – small helper that runs the Debian VM via Virtualization.framework.
+// Started in the background by the Rust core (src/vm.rs); download, provisioning
+// (cloud-init), status and `exec` (over ssh) are handled by the Rust core.
 //
 //   mpkg-vm run <vm-dir> <share-dir>
 //
-// <vm-dir> enthält disk.raw, seed.iso, mac (MAC-Adresse) und efi.vars (wird angelegt).
-// Liegen dort vmlinuz, initrd und cmdline, bootet die VM über VZLinuxBootLoader (macOS 12),
-// sonst per EFI (ab macOS 13).
-// Ruhemodus: Der Rust-Kern berührt <vm-dir>/last-used bei jedem Aufruf. Ist das länger als
-// idleSeconds her und läuft keine ssh-Sitzung mit dem VM-Schlüssel, fährt die VM herunter.
-// <share-dir> wird per virtiofs mit dem Tag "home" in den Gast gereicht.
-// Läuft im Vordergrund, bis der Gast herunterfährt oder SIGTERM kommt.
+// <vm-dir> contains disk.raw, seed.iso, mac (MAC address) and efi.vars (created if missing).
+// If vmlinuz, initrd and cmdline are present, the VM boots via VZLinuxBootLoader (macOS 12),
+// otherwise via EFI (macOS 13+).
+// Idle mode: the Rust core touches <vm-dir>/last-used on every call. If that is longer ago
+// than idleSeconds and no ssh session with the VM key is running, the VM shuts down.
+// <share-dir> is passed to the guest via virtiofs with the tag "home".
+// Runs in the foreground until the guest shuts down or SIGTERM arrives.
 //
-// Die Binary braucht das Entitlement com.apple.security.virtualization:
+// The binary needs the entitlement com.apple.security.virtualization:
 //   codesign --sign - --entitlements mpkg-vm.entitlements --force .build/release/mpkg-vm
 
 import Foundation
 import Virtualization
 
-// shortcut: feste Ressourcen, bei Bedarf später über Argumente konfigurierbar machen.
+// shortcut: fixed resources, make them configurable via arguments if needed.
 let cpuCount = 2
 let memoryBytes: UInt64 = 2 * 1024 * 1024 * 1024
-// MPKG_VM_IDLE_SECONDS überschreibt den Wert (für Tests).
+// MPKG_VM_IDLE_SECONDS overrides the value (for tests).
 let idleSeconds: TimeInterval = ProcessInfo.processInfo.environment["MPKG_VM_IDLE_SECONDS"].flatMap(TimeInterval.init) ?? 10 * 60
 
 func log(_ message: String) {
@@ -54,7 +54,7 @@ func makeConfiguration(vmDir: URL, share: URL) throws -> VZVirtualMachineConfigu
         config.bootLoader = loader
         config.platform = VZGenericPlatformConfiguration()
     } else {
-        throw NSError(domain: "mpkg-vm", code: 2, userInfo: [NSLocalizedDescriptionKey: "vmlinuz fehlt (auf macOS 12 nötig)"])
+        throw NSError(domain: "mpkg-vm", code: 2, userInfo: [NSLocalizedDescriptionKey: "vmlinuz is missing (required on macOS 12)"])
     }
 
     let disk = try VZDiskImageStorageDeviceAttachment(
@@ -70,7 +70,7 @@ func makeConfiguration(vmDir: URL, share: URL) throws -> VZVirtualMachineConfigu
     net.attachment = VZNATNetworkDeviceAttachment()
     let macText = try String(contentsOf: vmDir.appendingPathComponent("mac"), encoding: .utf8)
     guard let mac = VZMACAddress(string: macText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-        throw NSError(domain: "mpkg-vm", code: 1, userInfo: [NSLocalizedDescriptionKey: "ungültige MAC-Adresse"])
+        throw NSError(domain: "mpkg-vm", code: 1, userInfo: [NSLocalizedDescriptionKey: "invalid MAC address"])
     }
     net.macAddress = mac
     config.networkDevices = [net]
@@ -79,7 +79,7 @@ func makeConfiguration(vmDir: URL, share: URL) throws -> VZVirtualMachineConfigu
     fs.share = VZSingleDirectoryShare(directory: VZSharedDirectory(url: share, readOnly: false))
     config.directorySharingDevices = [fs]
 
-    // Serielle Konsole nach stdout – der Rust-Kern leitet sie in vm-dir/console.log.
+    // Serial console to stdout – the Rust core redirects it to vm-dir/console.log.
     let serial = VZVirtioConsoleDeviceSerialPortConfiguration()
     serial.attachment = VZFileHandleSerialPortAttachment(
         fileHandleForReading: nil, fileHandleForWriting: FileHandle.standardOutput)
@@ -106,34 +106,34 @@ final class Runner: NSObject, VZVirtualMachineDelegate {
         vm.delegate = self
     }
 
-    /// Letzte Nutzung laut last-used, sonst der Startzeitpunkt.
+    /// Last use according to last-used, otherwise the start time.
     func lastUsed() -> Date {
         let path = vmDir.appendingPathComponent("last-used").path
         let modified = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
         return max(modified ?? startedAt, startedAt)
     }
 
-    /// Läuft noch eine ssh-Sitzung in die VM (z. B. ein offenes htop)?
+    /// Is an ssh session into the VM still running (e.g. an open htop)?
     func hasSession() -> Bool {
         let pgrep = Process()
         pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
         pgrep.arguments = ["-f", vmDir.appendingPathComponent("id_ed25519").path]
         pgrep.standardOutput = FileHandle.nullDevice
-        guard (try? pgrep.run()) != nil else { return true } // im Zweifel nicht stoppen
+        guard (try? pgrep.run()) != nil else { return true } // when in doubt, do not stop
         pgrep.waitUntilExit()
         return pgrep.terminationStatus == 0
     }
 
     func checkIdle() {
         if Date().timeIntervalSince(lastUsed()) > idleSeconds && !hasSession() {
-            log("Ruhemodus: \(Int(idleSeconds)) s ohne Nutzung – fahre herunter")
+            log("Idle: \(Int(idleSeconds)) s without use – shutting down")
             idleTimer?.cancel()
             shutdown()
         }
     }
 
     func start() {
-        // SIGTERM (`mpkg vm stop`): Gast sauber herunterfahren, nach 20 s hart stoppen.
+        // SIGTERM (`mpkg vm stop`): shut the guest down cleanly, hard stop after 20 s.
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
         source.setEventHandler { [weak self] in self?.shutdown() }
@@ -142,11 +142,11 @@ final class Runner: NSObject, VZVirtualMachineDelegate {
 
         vm.start { result in
             if case .failure(let error) = result {
-                fail("Start fehlgeschlagen: \(error.localizedDescription)")
+                fail("start failed: \(error.localizedDescription)")
             }
-            log("VM läuft")
+            log("VM running")
         }
-        // DispatchSource statt Timer: dispatchMain() betreibt keine RunLoop.
+        // DispatchSource instead of Timer: dispatchMain() runs no RunLoop.
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + 60, repeating: 60)
         timer.setEventHandler { [weak self] in self?.checkIdle() }
@@ -154,8 +154,8 @@ final class Runner: NSObject, VZVirtualMachineDelegate {
         idleTimer = timer
     }
 
-    /// Sauber über den Gast herunterfahren: Beim Linux-Bootloader (macOS 11/12) reagiert der
-    /// Gast nicht auf requestStop. Die IP legt der Rust-Kern in <vm-dir>/ip ab.
+    /// Shut down cleanly via the guest: with the Linux boot loader (macOS 12) the guest does
+    /// not react to requestStop. The Rust core stores the IP in <vm-dir>/ip.
     func poweroffViaSSH() {
         guard let ip = try? String(contentsOf: vmDir.appendingPathComponent("ip"), encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines), !ip.isEmpty else { return }
@@ -169,7 +169,7 @@ final class Runner: NSObject, VZVirtualMachineDelegate {
         ]
         ssh.standardOutput = FileHandle.nullDevice
         ssh.standardError = FileHandle.nullDevice
-        try? ssh.run() // nicht warten: guestDidStop beendet den Prozess
+        try? ssh.run() // do not wait: guestDidStop ends the process
     }
 
     func shutdown() {
@@ -183,18 +183,18 @@ final class Runner: NSObject, VZVirtualMachineDelegate {
     }
 
     func guestDidStop(_ virtualMachine: VZVirtualMachine) {
-        log("Gast heruntergefahren")
+        log("Guest shut down")
         exit(0)
     }
 
     func virtualMachine(_ virtualMachine: VZVirtualMachine, didStopWithError error: Error) {
-        fail("VM gestoppt: \(error.localizedDescription)")
+        fail("VM stopped: \(error.localizedDescription)")
     }
 }
 
 let args = Array(CommandLine.arguments.dropFirst())
 guard args.count == 3, args[0] == "run" else {
-    fail("Verwendung: mpkg-vm run <vm-dir> <share-dir>")
+    fail("usage: mpkg-vm run <vm-dir> <share-dir>")
 }
 
 let vmDir = URL(fileURLWithPath: args[1], isDirectory: true)
@@ -203,8 +203,8 @@ let runner: Runner
 do {
     runner = Runner(config: try makeConfiguration(vmDir: vmDir, share: share), vmDir: vmDir)
 } catch {
-    fail("Konfiguration ungültig: \(error.localizedDescription)")
+    fail("invalid configuration: \(error.localizedDescription)")
 }
-// VZVirtualMachine muss auf der Queue bedient werden, auf der es erzeugt wurde (main).
+// VZVirtualMachine must be used on the queue it was created on (main).
 runner.start()
 dispatchMain()
